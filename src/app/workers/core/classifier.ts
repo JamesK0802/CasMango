@@ -220,20 +220,25 @@ function findOffset(seqUp: string, refUp: string, sgrnaSeq: string): number | nu
 
 function editDistance(a: string, b: string, maxErrors: number = MAX_ANCHOR_ERRORS): number {
   if (Math.abs(a.length - b.length) > maxErrors) return maxErrors + 1;
-  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  // Only distances within the existing error allowance are relevant. Any path
+  // outside this diagonal band already needs more than maxErrors gaps.
+  const limit = maxErrors + 1;
+  let previous = new Int32Array(b.length + 1).fill(limit);
+  let current = new Int32Array(b.length + 1);
+  for (let j = 0; j <= Math.min(b.length, maxErrors); j++) previous[j] = j;
   for (let i = 1; i <= a.length; i++) {
-    const current = new Array<number>(b.length + 1);
-    current[0] = i;
+    current.fill(limit);
+    current[0] = Math.min(i, limit);
     let rowMin = current[0];
-    for (let j = 1; j <= b.length; j++) {
+    for (let j = Math.max(1, i - maxErrors); j <= Math.min(b.length, i + maxErrors); j++) {
       const substitution = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
       current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, substitution);
       rowMin = Math.min(rowMin, current[j]);
     }
     if (rowMin > maxErrors) return maxErrors + 1;
-    previous = current;
+    [previous, current] = [current, previous];
   }
-  return previous[b.length];
+  return Math.min(previous[b.length], limit);
 }
 
 /** Locate an observed terminal anchor without letting SequenceMatcher discard
@@ -317,6 +322,80 @@ function observedWindowEndpoints(reference: string, observation: string): {
   return { refStart, obsStart, refEnd, obsEnd };
 }
 
+/** A failed exact terminal seed is not evidence that the molecule lacks the
+ * cut. Search only bounded terminal reference flanks, using exact 10 bp seeds
+ * followed by the existing error allowance. Require unique placements on BOTH
+ * sides; never infer coverage from one flank or from an X separator. */
+function rescueObservedFlanks(
+  seq: string, qual: QualityScores | null, reference: string, cut: number
+): AlignResult | null {
+  const length = 30;
+  // Keep short-window assignment unchanged. The bounded 90-bp terminal search
+  // is intended to rescue spanning large-indel windows, not relax local calls.
+  if (reference.length < 180 || cut < 45 || reference.length - cut < 45) return null;
+  type Hit = { ref: number; query: number; end: number; errors: number };
+  const findFlank = (starts: number[]): Hit | null => {
+    const hits: Hit[] = [];
+    for (const ref of starts) {
+      const anchor = reference.substring(ref, ref + length);
+      if (reference.indexOf(anchor) !== ref || reference.indexOf(anchor, ref + 1) !== -1) continue;
+      const candidates = new Set<number>();
+      for (let seed = 0; seed < length; seed += 10) {
+        const word = anchor.substring(seed, seed + 10);
+        let found = seq.indexOf(word);
+        // Repetitive seeds cannot supply unique positional evidence.
+        let occurrences = 0;
+        while (found !== -1 && occurrences++ < 16) {
+          for (let shift = -MAX_ANCHOR_ERRORS; shift <= MAX_ANCHOR_ERRORS; shift++) {
+            const start = found - seed + shift;
+            if (start >= 0 && start + length - MAX_ANCHOR_ERRORS <= seq.length) candidates.add(start);
+          }
+          found = seq.indexOf(word, found + 1);
+        }
+        if (found !== -1) return null;
+      }
+      for (const query of candidates) {
+        let bestErrors = MAX_ANCHOR_ERRORS + 1, end = -1;
+        for (let size = length - MAX_ANCHOR_ERRORS; size <= length + MAX_ANCHOR_ERRORS; size++) {
+          if (query + size > seq.length) continue;
+          const errors = editDistance(anchor, seq.substring(query, query + size));
+          if (errors < bestErrors || (errors === bestErrors && Math.abs(size - length) < Math.abs(end - query - length))) {
+            bestErrors = errors; end = query + size;
+          }
+        }
+        if (bestErrors <= MAX_ANCHOR_ERRORS) hits.push({ ref, query, end, errors: bestErrors });
+      }
+    }
+    if (!hits.length) return null;
+    hits.sort((a, b) => a.errors - b.errors || a.ref - b.ref || a.query - b.query);
+    const best = hits[0];
+    // Nearby starts describe the same noisy flank. Separate placements are
+    // ambiguous even if one has a slightly better score.
+    if (hits.some(hit => Math.abs((hit.query - hit.ref) - (best.query - best.ref)) > 2 * MAX_ANCHOR_ERRORS)) return null;
+    return best;
+  };
+  const leftStarts: number[] = [], rightStarts: number[] = [];
+  for (let distance = 0; distance <= 60; distance += 15) {
+    if (distance + length <= cut - CUT_SITE_MIN_FLANK) leftStarts.push(distance);
+    const start = reference.length - length - distance;
+    if (start >= cut + CUT_SITE_MIN_FLANK) rightStarts.push(start);
+  }
+  const left = findFlank(leftStarts);
+  if (!left) return null;
+  const right = findFlank(rightStarts);
+  if (!right || left.end > right.query) return null;
+  const start = left.query - Math.min(left.ref, left.query);
+  const leftX = left.ref - Math.min(left.ref, left.query);
+  const refTail = reference.length - right.ref - length;
+  const extension = Math.min(refTail, seq.length - right.end);
+  const end = right.end + extension;
+  const rightX = refTail - extension;
+  const observed = seq.substring(start, end);
+  return { fail: null, observed_read: observed,
+    read_window: 'X'.repeat(leftX) + observed + 'X'.repeat(rightX),
+    qual_observed: qual ? qual.slice(start, end) : null, left_x: leftX, right_x: rightX };
+}
+
 function alignReadToWindow(
   seq: string,
   qual: QualityScores | null,
@@ -365,8 +444,7 @@ function alignReadToWindow(
   const canUseObservedPair = anchorLen === ANCHOR_LEN &&
     leftPositions.length === 1 && rightPositions.length === 1 &&
     cutIdxInWindow >= anchorLen && cutIdxInWindow <= winLen - anchorLen;
-  // Failed offset coverage cannot be rescued by missing/repeated anchors.
-  // Reject before the pair loop, avoiding quadratic work on repetitive reads.
+  // Do not enter the pair loop for repeated anchors without offset coverage.
   if (!offsetCoversCut && !canUseObservedPair) return { fail: 'no_coverage' };
 
   // Find best anchor pair
@@ -651,6 +729,13 @@ function isReadUsableCached(
 
   const candidates: Array<{ res: AlignResult; isRc: boolean }> = [];
   const failReasons = new Set<string>();
+  const rescueCandidates: Array<{ seq: string; qual: QualityScores | null; isRc: boolean }> = [];
+  const consider = (res: AlignResult, isRc: boolean): void => {
+    if (res.fail !== null) { failReasons.add(res.fail); return; }
+    if (!xawareAnchorCheck(res.read_window!, refWindow)) { failReasons.add('no_anchor'); return; }
+    if (res.qual_observed && res.qual_observed.length > 0 && avgPhred(res.qual_observed) < phredThreshold) { failReasons.add('quality'); return; }
+    candidates.push({ res, isRc });
+  };
 
   // Evaluate each contiguous observed segment independently. This makes an
   // Illumina inter-mate X guard equivalent to terminal X padding: X never
@@ -662,28 +747,19 @@ function isReadUsableCached(
     const rcRes = alignReadToWindow(rcSeq, rcQual, refWindow, cutIdxInWindow, sgrnaSeq);
 
     for (const [res, isRc] of [[fwRes, false], [rcRes, true]] as [AlignResult, boolean][]) {
-      if (res.fail !== null) {
-        failReasons.add(res.fail);
-        continue;
+      consider(res, isRc);
+      if (res.fail === 'no_alignment' || res.fail === 'no_coverage') {
+        rescueCandidates.push({ seq: isRc ? rcSeq : segment.seq, qual: isRc ? rcQual : segment.qual, isRc });
       }
+    }
+  }
 
-      if (!xawareAnchorCheck(res.read_window!, refWindow)) {
-        failReasons.add('no_anchor');
-        continue;
-      }
-
-      if (res.qual_observed) {
-        const observedQuals = Array.from(res.qual_observed);
-        if (observedQuals.length > 0) {
-          const avgQ = observedQuals.reduce((sum, value) => sum + value, 0) / observedQuals.length;
-          if (avgQ < phredThreshold) {
-            failReasons.add('quality');
-            continue;
-          }
-        }
-      }
-
-      candidates.push({ res, isRc });
+  // Keep every previously usable molecule and its orientation unchanged.
+  // A rescue is needed only after ALL native orientation/segment paths fail.
+  if (!candidates.length) {
+    for (const candidate of rescueCandidates) {
+      const rescued = rescueObservedFlanks(candidate.seq, candidate.qual, refWindow.toUpperCase(), cutIdxInWindow);
+      if (rescued) consider(rescued, candidate.isRc);
     }
   }
 
