@@ -58,8 +58,7 @@
 
         <div class="folder-input-actions">
           <input type="file" #folderInput webkitdirectory multiple hidden (change)="onFileSelected($event)" />
-          <button type="button" class="btn-folder-input" (click)="folderInput.click()" [disabled]="isReadingFolders">Add folder</button>
-          <span class="hint">All subfolders are searched. Add more folders or drag multiple folders here.</span>
+          <button type="button" class="btn-folder-input" (click)="folderInput.click()" [disabled]="isReadingFolders">Upload folder</button>
           <span *ngIf="isReadingFolders" role="status">Reading folders…</span>
         </div>
 
@@ -93,13 +92,7 @@
           </article>
         </div>
         <div class="folder-copy-actions" *ngIf="uploadedSequenceFiles.length > 0">
-          <label for="collection-folder-name">Collect a copy of these input files</label>
-          <div class="folder-copy-controls">
-            <input id="collection-folder-name" type="text" [(ngModel)]="collectionFolderName" [ngModelOptions]="{standalone: true}" [disabled]="isCopyingFiles" placeholder="New folder name" />
-            <button type="button" class="btn-folder-input" (click)="copyUploadedFilesToFolder()" [disabled]="!canCopyToFolder || isCopyingFiles || isReadingFolders">{{ isCopyingFiles ? 'Copying…' : 'Choose location & copy files' }}</button>
-          </div>
-          <span class="hint">Copies the original files into a new folder on your computer. Duplicate names receive a numeric suffix.</span>
-          <span class="hint" *ngIf="!canCopyToFolder">Local folder copying requires a browser with folder-write access, such as desktop Chrome or Edge on HTTPS or localhost.</span>
+          <button type="button" class="btn-folder-input" (click)="openCollectFilesDialog()" [disabled]="isReadingFolders || isCopyingFiles">Collect files into folder</button>
         </div>
         <p class="file-action-message" *ngIf="fileActionMessage" role="status" aria-live="polite">{{ fileActionMessage }}</p>
       </div>
@@ -666,6 +659,43 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="collection-modal-backdrop" *ngIf="showCollectFilesDialog" (click)="closeCollectFilesDialog()">
+    <section class="collection-modal" role="dialog" aria-modal="true" aria-labelledby="collection-title" (click)="$event.stopPropagation()" (keydown)="collectionDialogKeydown($event)">
+      <header class="collection-modal-header">
+        <h2 id="collection-title">Collect files into folder</h2>
+        <button type="button" class="btn-folder-input" (click)="closeCollectFilesDialog()" [disabled]="isCopyingFiles" aria-label="Close file collection">×</button>
+      </header>
+      <p class="collection-summary">{{ collectionRows.length }} files · Originals stay unchanged</p>
+      <label class="collection-field" for="collection-folder-name">Folder name</label>
+      <input id="collection-folder-name" class="collection-name-input" type="text" [(ngModel)]="collectionFolderName" [disabled]="isCopyingFiles" placeholder="New folder name" />
+      <label class="collection-field">Folder location</label>
+      <div class="collection-location-row">
+        <span>{{ collectionLocation?.name || 'Not selected' }}</span>
+        <button type="button" class="btn-folder-input" (click)="chooseCollectionLocation()" [disabled]="!canCopyToFolder || isCopyingFiles">Choose location</button>
+      </div>
+      <p class="collection-error" *ngIf="!canCopyToFolder">Folder copying requires desktop Chrome or Edge on HTTPS or localhost.</p>
+      <label class="collection-rename-toggle"><input type="checkbox" [(ngModel)]="changeCollectionFileNames" [disabled]="isCopyingFiles" /> Change file name</label>
+      <div class="collection-name-table" *ngIf="changeCollectionFileNames">
+        <table>
+          <thead><tr><th>Current file name</th><th>New file name</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let row of collectionRows; let i = index">
+              <td [title]="sequenceFilePath(row.file)">{{ row.currentName }}</td>
+              <td><input type="text" [(ngModel)]="row.newName" [disabled]="isCopyingFiles" [attr.data-rename-row]="i" [attr.aria-label]="'New file name for ' + row.file.name" (paste)="pasteCollectionNames($event, i)" (keydown)="moveCollectionCell($event, i)" /></td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Paste a column or two-column range from Excel. File extensions stay unchanged.</p>
+      </div>
+      <p class="collection-error" *ngIf="collectionNameError">{{ collectionNameError }}</p>
+      <p class="collection-progress" *ngIf="collectionMessage" role="status" aria-live="polite">{{ collectionMessage }}</p>
+      <footer class="collection-modal-footer">
+        <button type="button" class="btn-folder-input" (click)="closeCollectFilesDialog()" [disabled]="isCopyingFiles">Cancel</button>
+        <button type="button" class="btn-folder-input collection-copy-button" (click)="copyUploadedFilesToFolder()" [disabled]="!canCreateCollection">{{ isCopyingFiles ? 'Copying…' : 'Create folder & copy files' }}</button>
+      </footer>
+    </section>
   </div>
 
   <div *ngIf="state.error" class="error-box">

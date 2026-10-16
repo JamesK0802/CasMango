@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectDroppedEntries, copySequenceFiles, DroppedEntry, isSequenceFile, LocalDirectory } from './sequence-file-io';
+import { collectDroppedEntries, copySequenceFiles, DroppedEntry, isSequenceFile, LocalDirectory, pastedFileStems, sequenceFilenameParts } from './sequence-file-io';
 import { addFilesToIlluminaPairs } from './illumina.model';
 
 const fileEntry = (name: string): DroppedEntry => ({ name, isFile: true, isDirectory: false, file: resolve => resolve(new File(['abc'], name)) });
@@ -38,6 +38,11 @@ describe('sequence folder input', () => {
 });
 
 describe('local input collection', () => {
+  it('splits the full compressed extension and reads Excel one/two-column paste', () => {
+    expect(sequenceFilenameParts('sample.FASTQ.GZ')).toEqual({ stem: 'sample', extension: '.FASTQ.GZ' });
+    expect(pastedFileStems('new1\r\nnew2\r\n')).toEqual(['new1', 'new2']);
+    expect(pastedFileStems('old1\tnew1\nold2\tnew2\n')).toEqual(['new1', 'new2']);
+  });
   function destination(exists = false, failAt = '') {
     const bytes = new Map<string, Uint8Array[]>();
     const folder: LocalDirectory = { name: 'collection', getDirectoryHandle: async () => { throw new Error('unused'); },
@@ -68,6 +73,20 @@ describe('local input collection', () => {
     const { parent, bytes } = destination(true);
     await expect(copySequenceFiles(parent, 'existing', [], () => {})).rejects.toThrow('already exists');
     await expect(copySequenceFiles(parent, '../outside', [], () => {})).rejects.toThrow('folder name');
+    expect(bytes.size).toBe(0);
+  });
+  it('renames copies only and preserves each original extension', async () => {
+    const { parent, bytes } = destination();
+    const files = [new File(['a'], 'old.fq.gz'), new File(['b'], 'other.fastq')];
+    await copySequenceFiles(parent, 'new', files, () => {}, ['sample1', 'sample2']);
+    expect([...bytes.keys()]).toEqual(['sample1.fq.gz', 'sample2.fastq']);
+    expect(files.map(file => file.name)).toEqual(['old.fq.gz', 'other.fastq']);
+  });
+  it('rejects invalid, missing or colliding edited names before writing', async () => {
+    const { parent, bytes } = destination(); const files = [new File(['a'], 'a.fq'), new File(['b'], 'b.fq')];
+    for (const names of [['same','SAME'], ['one'], ['', 'valid'], ['../bad', 'valid']]) {
+      await expect(copySequenceFiles(parent, 'new', files, () => {}, names)).rejects.toThrow();
+    }
     expect(bytes.size).toBe(0);
   });
   it('only credits completed copies when a write fails', async () => {

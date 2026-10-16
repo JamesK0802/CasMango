@@ -6,7 +6,7 @@ import { ResultDashboardComponent } from '../../components/result-dashboard/resu
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Subscription, debounceTime } from 'rxjs';
-import { collectDroppedEntries, copySequenceFiles, DroppedEntry, isSequenceFile, LocalDirectory, validCollectionName } from '../../models/sequence-file-io';
+import { collectDroppedEntries, copySequenceFiles, DroppedEntry, isSequenceFile, LocalDirectory, pastedFileStems, sequenceFilenameParts, validCollectionName, validFileStem } from '../../models/sequence-file-io';
 import { findGrnaCutSite, extractWindow, cutIndexInWindow } from '../../workers/core/classifier';
 import { ReferenceMatcher as SequenceMatcher, compareReferences, rememberComparison, setComparisonCacheLimit, ReferenceComparison } from '../../workers/core/reference-comparison';
 import {
@@ -129,7 +129,12 @@ interface ReferenceExcelRow { homoeologName: string; geneName: string; geneSeq: 
 export class AnalysisPageComponent implements OnInit, OnDestroy {
   isReadingFolders = false;
   isCopyingFiles = false;
-  collectionFolderName = 'CasMANGO_inputs';
+  collectionFolderName = '';
+  showCollectFilesDialog = false;
+  changeCollectionFileNames = false;
+  collectionLocation: LocalDirectory | null = null;
+  collectionRows: Array<{ file: File; currentName: string; newName: string; extension: string }> = [];
+  collectionMessage = '';
   fileActionMessage = '';
   private readonly sequencePaths = new WeakMap<File, string>();
 
@@ -143,29 +148,96 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
 
   sequenceFilePath(file: File): string { return this.sequencePaths.get(file) || file.webkitRelativePath || file.name; }
 
-  async copyUploadedFilesToFolder(): Promise<void> {
-    if (this.isCopyingFiles || !this.canCopyToFolder) return;
-    const files = [...this.uploadedSequenceFiles];
-    if (!files.length) return;
-    if (!validCollectionName(this.collectionFolderName)) {
-      this.fileActionMessage = 'Enter a folder name without slashes or leading/trailing spaces.';
-      return;
-    }
-    const folderName = this.collectionFolderName;
-    this.isCopyingFiles = true;
-    this.fileActionMessage = '';
-    let copied = 0;
+  openCollectFilesDialog(): void {
+    this.collectionRows = this.uploadedSequenceFiles.map(file => {
+      const { stem, extension } = sequenceFilenameParts(file.name);
+      return { file, currentName: stem, newName: stem, extension };
+    });
+    this.collectionFolderName = '';
+    this.collectionLocation = null;
+    this.changeCollectionFileNames = false;
+    this.collectionMessage = '';
+    this.showCollectFilesDialog = true;
+    setTimeout(() => document.getElementById('collection-folder-name')?.focus());
+  }
+
+  closeCollectFilesDialog(): void {
+    if (!this.isCopyingFiles) this.showCollectFilesDialog = false;
+  }
+
+  collectionDialogKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') { event.preventDefault(); this.closeCollectFilesDialog(); return; }
+    if (event.key !== 'Tab') return;
+    const controls = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])'));
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+
+  get collectionNameError(): string {
+    if (this.collectionFolderName && !validCollectionName(this.collectionFolderName)) return 'Enter a valid folder name without slashes or leading/trailing spaces.';
+    if (!this.changeCollectionFileNames) return '';
+    if (this.collectionRows.some(row => !validFileStem(row.newName))) return 'Enter a valid new name for every file.';
+    const names = this.collectionRows.map(row => (row.newName + row.extension).toLowerCase());
+    return new Set(names).size !== names.length ? 'New file names must be unique.' : '';
+  }
+
+  get canCreateCollection(): boolean {
+    return this.canCopyToFolder && !this.isCopyingFiles && !!this.collectionLocation &&
+      validCollectionName(this.collectionFolderName) && this.collectionRows.length > 0 && !this.collectionNameError;
+  }
+
+  async chooseCollectionLocation(): Promise<void> {
+    if (!this.canCopyToFolder || this.isCopyingFiles) return;
     try {
       const picker = (window as unknown as { showDirectoryPicker(options: { mode: string }): Promise<LocalDirectory> }).showDirectoryPicker;
-      const parent = await picker.call(window, { mode: 'readwrite' });
+      this.collectionLocation = await picker.call(window, { mode: 'readwrite' });
+      this.collectionMessage = '';
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError') this.collectionMessage = `Location could not be selected. ${(error as Error).message}`;
+    } finally { this.cdr.detectChanges(); }
+  }
+
+  pasteCollectionNames(event: ClipboardEvent, start: number): void {
+    const text = event.clipboardData?.getData('text/plain');
+    if (!text || this.isCopyingFiles) return;
+    event.preventDefault();
+    const names = pastedFileStems(text);
+    if (start + names.length > this.collectionRows.length) {
+      this.collectionMessage = 'The pasted rows exceed the file list. No names were changed.';
+      return;
+    }
+    names.forEach((name, offset) => this.collectionRows[start + offset].newName = name);
+    this.collectionMessage = '';
+  }
+
+  moveCollectionCell(event: KeyboardEvent, index: number): void {
+    const offset = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' || event.key === 'Enter' ? 1 : 0;
+    if (!offset) return;
+    event.preventDefault();
+    const input = document.querySelector<HTMLInputElement>(`[data-rename-row="${index + offset}"]`);
+    input?.focus(); input?.select();
+  }
+
+  async copyUploadedFilesToFolder(): Promise<void> {
+    if (!this.canCreateCollection || !this.collectionLocation) return;
+    const files = this.collectionRows.map(row => row.file);
+    const parent = this.collectionLocation;
+    const newStems = this.changeCollectionFileNames ? this.collectionRows.map(row => row.newName) : undefined;
+    const folderName = this.collectionFolderName;
+    this.isCopyingFiles = true;
+    this.collectionMessage = '';
+    let copied = 0;
+    try {
       await copySequenceFiles(parent, folderName, files, count => {
         copied = count;
-        this.fileActionMessage = `Copying ${count} / ${files.length} files…`;
+        this.collectionMessage = `Copying ${count} / ${files.length} files…`;
         this.cdr.detectChanges();
-      });
+      }, newStems);
       this.fileActionMessage = `Copied ${copied} files to ${parent.name}/${folderName}. Original files are unchanged.`;
+      this.showCollectFilesDialog = false;
     } catch (error) {
-      this.fileActionMessage = (error as DOMException).name === 'AbortError' && copied === 0
+      this.collectionMessage = (error as DOMException).name === 'AbortError' && copied === 0
         ? 'Copy cancelled.'
         : `Copy stopped (${copied}/${files.length} completed). ${(error as Error).message} Any partial copies remain in the destination.`;
     } finally {

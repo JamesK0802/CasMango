@@ -46,10 +46,32 @@ export function validCollectionName(name: string): boolean {
   return !!name.trim() && name === name.trim() && name !== '.' && name !== '..' && !/[\\/\x00-\x1f]/.test(name);
 }
 
+export function sequenceFilenameParts(name: string): { stem: string; extension: string } {
+  const match = /^(.*?)(\.(?:fastq|fq)(?:\.gz)?)$/i.exec(name);
+  return { stem: match?.[1] || name, extension: match?.[2] || '' };
+}
+
+export function validFileStem(name: string): boolean {
+  return validCollectionName(name) && !/[<>:"|?*]/.test(name) && !/[. ]$/.test(name);
+}
+
+/** Excel may provide one column of new names or both current/new-name columns. */
+export function pastedFileStems(text: string): string[] {
+  return text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').map(row => {
+    const cells = row.split('\t');
+    return cells.length > 1 ? cells[1] : cells[0];
+  });
+}
+
 export async function copySequenceFiles(
-  parent: LocalDirectory, folderName: string, files: File[], onCopied: (count: number) => void,
+  parent: LocalDirectory, folderName: string, files: File[], onCopied: (count: number) => void, newStems?: string[],
 ): Promise<void> {
   if (!validCollectionName(folderName)) throw new Error('Enter a folder name without slashes or leading/trailing spaces.');
+  if (newStems) {
+    if (newStems.length !== files.length || newStems.some(name => !validFileStem(name))) throw new Error('Enter a valid new name for every file.');
+    const names = newStems.map((name, i) => (name + sequenceFilenameParts(files[i].name).extension).toLowerCase());
+    if (new Set(names).size !== names.length) throw new Error('New file names must be unique.');
+  }
   // Require a new folder: never overwrite an existing destination or a source file.
   try {
     await parent.getDirectoryHandle(folderName);
@@ -60,11 +82,11 @@ export async function copySequenceFiles(
   const destination = await parent.getDirectoryHandle(folderName, { create: true });
   const used = new Set<string>();
   let count = 0;
-  for (const file of files) {
-    const match = /^(.*?)(\.(?:fastq|fq)(?:\.gz)?)$/i.exec(file.name);
-    const stem = match?.[1] || file.name;
-    const extension = match?.[2] || '';
-    let name = file.name;
+  for (const [index, file] of files.entries()) {
+    const parts = sequenceFilenameParts(file.name);
+    const stem = newStems?.[index] ?? parts.stem;
+    const extension = parts.extension;
+    let name = stem + extension;
     for (let suffix = 2; used.has(name.toLowerCase()); suffix++) name = `${stem} (${suffix})${extension}`;
     used.add(name.toLowerCase());
     const handle = await destination.getFileHandle(name, { create: true });
