@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
-import { ProjectItem, SequenceDocument } from '../../models/sequence.model';
+import { ProjectItem } from '../../models/sequence.model';
 import { getGCContent } from '../../utils/biology.utils';
 import { SearchPanelComponent } from './search-panel.component';
 

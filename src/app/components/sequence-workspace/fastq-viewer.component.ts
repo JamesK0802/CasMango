@@ -896,7 +896,6 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   startX = 0;
   scrollLeft = 0;
 
-  private currentDocId: string | null = null;
   selectedReadInfo: ProcessedRead | null = null;
   private loadSentinelRef?: ElementRef<HTMLElement>;
   private loadObserver?: IntersectionObserver;
@@ -920,7 +919,6 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       const currId = changes['document'].currentValue?.id;
 
       if (prevId !== currId) {
-        this.currentDocId = currId || null;
         this.isAlignedActive = false;
         this.alignmentReadOrder = 'aligned';
         this.alignedWindowSeq = '';

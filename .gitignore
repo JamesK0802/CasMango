@@ -1,0 +1,16 @@
+# Dependencies and generated output
+node_modules/
+.angular/
+.vite/
+dist/
+out-tsc/
+coverage/
+*.tsbuildinfo
+
+# Local OS/editor files
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

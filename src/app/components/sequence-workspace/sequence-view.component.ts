@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, ElementRef, OnDestroy, AfterViewInit, ChangeDetectorRef, HostListener, Output, EventEmitter } from '@angular/core';
+import { Component, Input, OnChanges, ElementRef, OnDestroy, AfterViewInit, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';

@@ -146,7 +146,6 @@ export function calculateTm(seq: string): number {
     const sS = (clean.match(/[CG]/g) || []).length;
     return (wS * 2) + (sS * 4);
   } else {
-    const wS = (clean.match(/[AT]/g) || []).length;
     const cg = (seq.match(/[CG]/g) || []).length;
     return 64.9 + 41 * (cg - 16.4) / seq.length;
   }

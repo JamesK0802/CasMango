@@ -1,75 +1,39 @@
-# CasMango — Local CRISPR Analysis
+# CasMango
 
-**CasMango** is a standalone browser application for fast, private CRISPR sequence-editing analysis. It supports Nanopore and Illumina paired-end FASTQ data, multi-reference target assignment, configurable cut-site windows, mutation classification, benchmarking, and an integrated Sequence Viewer. All processing runs locally with Web Workers.
+**[Open CasMango →](https://jamesk0802.github.io/CasMango/)**
 
-> [!IMPORTANT]
-> **100% Privacy Guarantee**: 
-> FASTQ sequencing files and reference configurations remain entirely on your local computer. No sequencing data is ever uploaded to any server or cloud database.
-
----
-
-## No Server, No API, No Backend Required
-
-This is a **pure frontend SPA (Single Page Application)**.
-- **No backend server** is required to run the analysis.
-- **No API keys, credentials, or databases** are used.
-- The compiled output is purely static files (`HTML`, `JS`, `CSS`, and images) that can be hosted directly on any static file provider.
-
----
+Browser-based analysis of pooled CRISPR amplicon sequencing, with Nanopore and Illumina paired-end support. Analysis runs locally on your computer; sequencing reads are not sent to a server.
 
 ## Features
 
-- **Local FASTQ Processing**: Parse and analyze sequencing data (FASTQ/FQ formats) using multithreaded client-side Web Workers.
-- **Nanopore and Illumina**: Preserve the Nanopore workflow while normalizing paired-end Illumina reads through target-aware consensus preprocessing.
-- **Flexible Cut-Site Windows**: Use symmetric windows or configure independent left/right window sizes.
-- **Sequence Viewer**: Inspect generated and imported FASTQ reads with reference-aware alignment controls.
-- **Reference Configuration**: Bulk-configure reference genes and gRNA targets using a simple downloadable Excel template or via the interactive UI.
-- **Interactive Mutation Dashboard**: View out-of-frame, in-frame, unmodified, and substitution distributions, with responsive charts powered by Chart.js.
-- **Unified Sequence Alignment & Annotation**: Inspect exact base-level mutations (deletions, insertions, and substitutions) aligned against your reference sequences, with direct cut-site indicator visualization.
-- **Offline Result Curation**: Recursively exclude specific files, genes, targets, or mutation groups from your dataset. Editing efficiency statistics and dashboard visualization recalculate instantly.
-- **Local Import & Export**: Export rich, multi-sheet Excel reports with embedded visualization diagrams, or re-upload previously exported reports to review results at any time offline.
+- Multi-reference assignment with ambiguity handling, plus a homoeolog mode.
+- Configurable target windows and mutation classification with read-level annotations.
+- File and folder input (`.fq`, `.fastq`, `.fq.gz`, `.fastq.gz`), automatic filename sorting and drag reordering.
+- Copy selected files into a local folder, with optional batch renaming (desktop Chrome/Edge).
+- Curate files, references and mutation groups; save the retained results as a new baseline.
+- Excel result export/reopening, benchmarking and a sequence workspace.
 
----
+## Run locally
 
-## Quick Start (Local NPM Development)
+Use Node.js 22.12+ (22.x) or 24.x.
 
-Ensure you have [Node.js](https://nodejs.org/) (v20+) installed on your machine.
-
-### 1. Install Dependencies
-```bash
-npm install
-```
-
-### 2. Run the Development Server
-```bash
+```sh
+npm ci
 npm start
 ```
-Open **[http://localhost:4200](http://localhost:4200)** in your browser. Live reloading is enabled by default.
 
-### 3. Run Unit Tests
-Execute the Vitest suite locally:
-```bash
-npm run test
+Open [localhost:4200](http://localhost:4200).
+
+```sh
+npm test        # Regression and unit tests
+npm run build   # Production output: dist/casmango/browser/
 ```
 
-### 4. Build Static Assets
-Compile the optimized production bundle:
-```bash
-npm run build
-```
-The compiled static web application will be generated in:
-**`dist/casmango/browser/`**
+## Project layout
 
----
+- `src/` — application and analysis code
+- `tests/` — core, model, service and UI regression tests with fixtures
+- `public/` — static assets
+- `.github/workflows/deploy.yml` — test, build and deploy to GitHub Pages
 
-## Production Static Deployment
-
-The compiled `dist/casmango/browser/` directory contains standard static files. You can upload this folder directly to any static host:
-
-- **GitHub Pages**
-- **Cloudflare Pages**
-- **Netlify**
-- **Vercel**
-- **Custom Web Server (Nginx / Apache / Amazon S3)**
-
-For detailed step-by-step instructions on deploying the build output to each platform, refer to the [Deployment Guide](docs/deployment.md).
+Pushes to `main` automatically test and deploy the [live site](https://jamesk0802.github.io/CasMango/). See [deployment notes](docs/deployment.md).

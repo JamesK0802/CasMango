@@ -1,4 +1,4 @@
-import { SequenceDocument, SequenceFeature } from '../models/sequence.model';
+import { SequenceDocument } from '../models/sequence.model';
 
 export function exportToFasta(doc: SequenceDocument): string {
   let fasta = `>${doc.name || 'Sequence'} ${doc.description || ''}\n`;

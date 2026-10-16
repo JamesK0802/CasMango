@@ -1,4 +1,4 @@
-import { SequenceDocument, SequenceFeature, Topology, Strand, FastqDocument, FastqRead, FastqStats } from '../models/sequence.model';
+import { SequenceDocument, SequenceFeature, FastqDocument, FastqRead, FastqStats } from '../models/sequence.model';
 import * as fflate from 'fflate';
 
 function generateId(): string {

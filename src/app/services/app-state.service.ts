@@ -1484,7 +1484,6 @@ export class AppStateService {
   benchStage$ = new BehaviorSubject<string>('');
   benchError: string | null = null;
   benchmarkResult: BenchmarkResult | null = null;
-  private benchDestroy$ = new Subject<void>();
   private benchProgressAnimId: any = null;
   private localBenchSub: Subscription | null = null;
 

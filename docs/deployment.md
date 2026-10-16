@@ -1,93 +1,22 @@
-# Static Deployment Guide
+# Deployment
 
-Because **CRISPR Local** runs 100% client-side in the browser, it requires no backend servers, database connectors, or cloud APIs. The entire application compiles down to lightweight, standard static web files (`HTML`, `JS`, `CSS`, and image assets) that can be hosted on any static platform.
+Live site: **https://jamesk0802.github.io/CasMango/**
 
----
+The [GitHub Actions workflow](../.github/workflows/deploy.yml) runs on pushes to `main` and can also be started manually from the Actions tab. It installs dependencies, runs tests, builds the app with `/CasMango/` as its base URL and deploys to GitHub Pages.
 
-## Compilation (Production Build)
+In repository **Settings → Pages**, the publishing source must be **GitHub Actions**. Do not commit `node_modules/`, build output or caches.
 
-Compile the optimized static build on your local computer:
+## Other static hosts
 
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Compile static assets
+```sh
+npm ci
 npm run build
 ```
 
-This generates the static distribution bundle inside:
-**`dist/casmango/browser/`**
+Serve `dist/casmango/browser/` using a static web server. For a subdirectory deployment, build with the appropriate prefix, for example:
 
----
-
-## Host Deployment Instructions
-
-Choose your hosting platform and follow the steps below to upload the compiled `dist/casmango/browser/` folder:
-
-### 1. GitHub Pages
-Since GitHub Pages hosts project sites under subfolders (e.g., `https://<username>.github.io/<repository-name>/`), configure the base href when compiling so that assets load from the correct directory:
-
-```bash
-# Replace <repository-name> with your actual GitHub repository name (e.g., casmango)
-npx ng build --configuration production --base-href /<repository-name>/
+```sh
+npm run build -- --base-href /CasMango/
 ```
 
-Once built:
-1. Push the contents of the `dist/casmango/browser` folder to a branch (e.g., `gh-pages`) in your repository.
-2. In your repository settings on GitHub, navigate to **Pages**.
-3. Under **Build and deployment**, choose the source branch (`gh-pages`) and path (`/ (root)`).
-4. Save and wait for the GitHub Pages deployment runner to complete.
-
-### 2. Cloudflare Pages
-1. Log in to the Cloudflare Dashboard and navigate to **Workers & Pages**.
-2. Click **Create Application** -> **Pages** -> **Upload assets**.
-3. Create a project name (e.g., `casmango`).
-4. Drag and drop the folder `dist/casmango/browser` to upload.
-5. Click **Deploy site**.
-
-### 3. Netlify
-- **Drag-and-Drop Method**:
-  1. Go to the [Netlify App](https://app.netlify.com/).
-  2. Drag the `dist/casmango/browser` folder directly into the deploy box on the Netlify dashboard.
-- **CLI Method**:
-  ```bash
-  npm install netlify-cli -g
-  netlify deploy --dir=dist/casmango/browser --prod
-  ```
-
-### 4. Vercel
-1. Install the Vercel CLI or link your Git repository to Vercel.
-2. If using Vercel CLI, deploy the directory:
-   ```bash
-   npm install -g vercel
-   vercel --prod --name casmango dist/casmango/browser
-   ```
-
-### 5. Custom Web Server (Nginx / Apache / Amazon S3)
-Copy the contents of `dist/casmango/browser` directly into the document root of your web server.
-
-**Example Nginx Server Block:**
-```nginx
-server {
-    listen 80;
-    server_name casmango.yourdomain.com;
-
-    location / {
-        root /var/www/casmango;
-        index index.html;
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
----
-
-## Local Static Verification
-
-You can test the production build locally before uploading it to a hosting provider using a simple server like `npx http-server`:
-
-```bash
-npx http-server dist/casmango/browser -p 8080
-```
-Then visit **[http://localhost:8080](http://localhost:8080)**.
+The app does not require an analysis backend, API credentials or a database. File and folder copying requires a supported browser on HTTPS or localhost.

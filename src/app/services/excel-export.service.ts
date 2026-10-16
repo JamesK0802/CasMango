@@ -144,7 +144,6 @@ export class ExcelExportService {
       const c = hdr2.getCell(i + 1); c.value = h2[i]; c.fill = this.HEADER_FILL; c.font = this.HEADER_FONT; c.border = this.BORDER_THIN; c.alignment = { horizontal: 'center' };
     }
     leftRow++;
-    let stripeIdx = 0;
     if (scope.genes) {
       for (const gene of scope.genes) {
         // Gene Sub-header for Table 3B
