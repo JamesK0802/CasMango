@@ -28,3 +28,22 @@
   .curation-sweep-status { max-width: calc(100vw - 32px); white-space: normal; }
   .annotation-more-footer { border-radius: 10px; }
 }
+.bulk-exclude-dialog {
+  max-width: min(440px, calc(100vw - 48px));
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 14px;
+  padding: 24px;
+  color: var(--color-text-primary, #222);
+  background: var(--color-surface, #fff);
+  box-shadow: 0 16px 60px #0003;
+}
+.bulk-exclude-dialog::backdrop { background: #0006; }
+.bulk-exclude-dialog h3 { margin: 0 0 12px; }
+.bulk-exclude-dialog p { line-height: 1.55; margin: 0 0 22px; }
+.bulk-exclude-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.bulk-exclude-actions button {
+  border: 1px solid var(--color-border, #ddd); border-radius: 8px;
+  padding: 9px 15px; cursor: pointer; background: var(--color-surface, #fff); color: inherit;
+}
+.bulk-exclude-actions .bulk-exclude-confirm { background: #bd3535; border-color: #bd3535; color: white; }
+.bulk-exclude-actions button:disabled { opacity: .45; cursor: not-allowed; }

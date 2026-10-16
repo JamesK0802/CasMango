@@ -1,4 +1,4 @@
-import { Component, ChangeDetectorRef, HostListener, NgZone, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectorRef, ElementRef, HostListener, NgZone, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -31,6 +31,35 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   scrollLeft = 0;
 
   visibleGroupCount = 10;
+  @ViewChild('excludeBelowDialog') excludeBelowDialog?: ElementRef<HTMLDialogElement>;
+  bulkGroupExclusion: { keys: string[]; context: string; config: unknown } | null = null;
+
+  openExcludeBelow(event: MouseEvent, group: MutationGroup): void {
+    event.preventDefault(); event.stopPropagation();
+    if (!this.state.isCuratedView) return;
+    this.cancelCurationSweep();
+    const groups: MutationGroup[] = this.state.selectedTarget?.top_groups || [];
+    const index = groups.findIndex(item => item.read_inner === group.read_inner);
+    if (index < 0) return;
+    // Use the complete ordered dataset, not the paginated DOM rows.
+    this.bulkGroupExclusion = {
+      keys: groups.slice(index).filter(item => !this.isGroupExcludedObj(item)).map(item => this.groupCurationKey(item)),
+      context: this.curationContext('group'), config: this.state.curationConfig
+    };
+    this.excludeBelowDialog?.nativeElement.showModal();
+  }
+
+  closeExcludeBelow(): void {
+    this.excludeBelowDialog?.nativeElement.close();
+    this.bulkGroupExclusion = null;
+  }
+
+  confirmExcludeBelow(): void {
+    const pending = this.bulkGroupExclusion;
+    this.closeExcludeBelow();
+    if (!pending || !this.state.isCuratedView || pending.config !== this.state.curationConfig || pending.context !== this.curationContext('group')) return;
+    this.applyCurationItems(pending.keys.map(key => ({ kind: 'group', key })), true);
+  }
   curationSweep: CurationSweep | null = null;
   private sweepPointer: { x: number; y: number; id: number } | null = null;
   private sweepFrame = 0;

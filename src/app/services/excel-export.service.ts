@@ -50,7 +50,9 @@ export class ExcelExportService {
 
     for (const scope of scopes) this.buildSheet(wb, scope, params, chartImages?.[scope.sheetName]);
     const dataSheet = wb.addWorksheet('.metadata', { state: 'hidden' });
-    const jsonData = JSON.stringify({ params, scopes, curationConfig: curationConfig || null });
+    // Retained scopes are the new baseline. Keep exclusions only as provenance,
+    // never as an active overlay that could be reapplied when reopening.
+    const jsonData = JSON.stringify({ params, scopes, curationConfig: null, curationHistory: curationConfig || null });
     const chunkSize = 30000;
     for (let i = 0; i < jsonData.length; i += chunkSize) dataSheet.addRow([jsonData.substring(i, i + chunkSize)]);
     const buf = await wb.xlsx.writeBuffer();
@@ -311,6 +313,7 @@ export class ExcelExportService {
     addPair('Curated View Name', config.curatedViewName);
     addPair('Source Result', config.sourceResultTitle);
     addPair('Created At', config.createdAt);
+    addPair('Saved As', 'Standalone curated baseline');
     row++;
 
     // Exclusion summary

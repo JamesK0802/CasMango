@@ -458,12 +458,13 @@
         style="border-bottom: 1px dotted #e0e0e0; background: white;">
         <div class="sticky-left" data-curation-kind="group" [attr.data-curation-key]="groupCurationKey(group)" [class.curation-pending]="isCurationPending('group', groupCurationKey(group))">
           <span *ngIf="state.isCuratedView" class="exclude-btn-group"
+            (contextmenu)="openExcludeBelow($event, group)"
             role="button" tabindex="0" aria-label="Exclude or restore group"
             (pointerdown)="beginCurationSweep($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
             (click)="onCurationClick($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
             (keydown.enter)="toggleGroup(group); $event.stopPropagation()" (keydown.space)="toggleGroup(group); $event.preventDefault(); $event.stopPropagation()"
             [class.is-excluded]="isGroupExcludedObj(group)"
-            title="Exclude/restore this group">
+            title="Exclude/restore this group. Right-click to exclude this group and all below.">
             {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
           </span>
           <ng-container *ngIf="!isGroupExcludedObj(group)">GROUP {{ group.group_rank }}</ng-container>
@@ -573,12 +574,13 @@
         <div class="mobile-group-summary" [class.excluded-row]="isGroupExcludedObj(group)"
           data-curation-kind="group" [attr.data-curation-key]="groupCurationKey(group)" [class.curation-pending]="isCurationPending('group', groupCurationKey(group))">
           <span *ngIf="state.isCuratedView" class="exclude-btn-group"
+            (contextmenu)="openExcludeBelow($event, group)"
             role="button" tabindex="0" aria-label="Exclude or restore group"
             (pointerdown)="beginCurationSweep($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
             (click)="onCurationClick($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
             (keydown.enter)="toggleGroup(group); $event.stopPropagation()" (keydown.space)="toggleGroup(group); $event.preventDefault(); $event.stopPropagation()"
             [class.is-excluded]="isGroupExcludedObj(group)"
-            title="Exclude/restore this group">
+            title="Exclude/restore this group. Right-click to exclude this group and all below.">
             {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
           </span>
           <div class="mobile-group-info-line">
@@ -636,6 +638,18 @@
     </div>
   </div>
 </div>
+
+<dialog #excludeBelowDialog class="bulk-exclude-dialog" aria-labelledby="bulk-exclude-title"
+  (cancel)="closeExcludeBelow()">
+  <h3 id="bulk-exclude-title">Exclude this group and all below?</h3>
+  <p>{{ bulkGroupExclusion?.keys?.length || 0 | number }} groups will be excluded from the current target,
+    including groups not yet displayed. Your original result stays unchanged.</p>
+  <div class="bulk-exclude-actions">
+    <button type="button" autofocus (click)="closeExcludeBelow()">Cancel</button>
+    <button type="button" class="bulk-exclude-confirm" [disabled]="!bulkGroupExclusion?.keys?.length"
+      (click)="confirmExcludeBelow()">Exclude groups</button>
+  </div>
+</dialog>
 </div>
 
   <div class="homoeolog-result-view" *ngIf="resultView === 'homoeolog' && hasHomoeologResults">
