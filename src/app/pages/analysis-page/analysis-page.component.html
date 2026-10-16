@@ -59,6 +59,7 @@
         <div class="folder-input-actions">
           <input type="file" #folderInput webkitdirectory multiple hidden (change)="onFileSelected($event)" />
           <button type="button" class="btn-folder-input" (click)="folderInput.click()" [disabled]="isReadingFolders">Upload folder</button>
+          <button *ngIf="uploadedSequenceFiles.length > 0" type="button" class="btn-folder-input" (click)="openCollectFilesDialog()" [disabled]="isReadingFolders || isCopyingFiles">Collect files into folder</button>
           <span *ngIf="isReadingFolders" role="status">Reading folders…</span>
         </div>
 
@@ -90,9 +91,6 @@
             </div>
             <strong class="illumina-pair-name" [title]="displayIlluminaPairName(pair)">{{ displayIlluminaPairName(pair) }}</strong>
           </article>
-        </div>
-        <div class="folder-copy-actions" *ngIf="uploadedSequenceFiles.length > 0">
-          <button type="button" class="btn-folder-input" (click)="openCollectFilesDialog()" [disabled]="isReadingFolders || isCopyingFiles">Collect files into folder</button>
         </div>
         <p class="file-action-message" *ngIf="fileActionMessage" role="status" aria-live="polite">{{ fileActionMessage }}</p>
       </div>
