@@ -54,7 +54,7 @@
           [attr.aria-disabled]="isReadingFolders" [class.dragging]="state.isDragging" (drop)="onFileDropped($event)"
           (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)"
           (click)="!isReadingFolders && uploadChoice.showModal()"
-          (keydown.enter)="!isReadingFolders && uploadChoice.showModal()"
+          (keydown.enter)="$event.preventDefault(); !isReadingFolders && uploadChoice.showModal()"
           (keydown.space)="$event.preventDefault(); !isReadingFolders && uploadChoice.showModal()">
           <p><strong>Drop files or folders, or click to upload</strong></p>
           <span class="hint" *ngIf="sequencingPlatform === 'nanopore'">FASTQ / FQ / GZ · Multiple files and folders allowed</span>
