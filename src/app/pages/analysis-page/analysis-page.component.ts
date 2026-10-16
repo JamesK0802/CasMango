@@ -127,6 +127,7 @@ interface ReferenceExcelRow { homoeologName: string; geneName: string; geneSeq: 
   styleUrl: './analysis-page.component.css'
 })
 export class AnalysisPageComponent implements OnInit, OnDestroy {
+  showUploadChoices = false;
   isReadingFolders = false;
   isCopyingFiles = false;
   collectionFolderName = '';
@@ -1110,6 +1111,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   onFileSelected(event: any) {
+    this.showUploadChoices = false;
     const files = Array.from(event.target.files || []) as File[];
     this.fileActionMessage = files.some(file => isSequenceFile(file.name)) ? '' : 'No supported FASTQ files were found.';
     this.addSequencingFiles(files);
@@ -1117,6 +1119,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   async onFileDropped(event: DragEvent) {
+    this.showUploadChoices = false;
     event.preventDefault();
     this.state.isDragging = false;
     if (this.isReadingFolders || !event.dataTransfer) return;
