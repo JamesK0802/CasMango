@@ -1,4 +1,5 @@
 import { Injectable, NgZone } from '@angular/core';
+import { findMergeTarget } from '../models/result-merge';
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
 import { BehaviorSubject, Subject, Subscription } from 'rxjs';
 import { ExcelExportService, ExportParams } from './excel-export.service';
@@ -657,10 +658,6 @@ export class AppStateService {
       const kind = gene.is_rescued_derived ? 'rescued' : gene.is_ambiguous_derived ? 'ambiguous' : 'normal';
       return `${kind}:${sequence ? `sequence:${sequence}` : `legacy-name:${gene.gene}`}`;
     };
-    const targetKey = (target: any) => {
-      const sequence = normalizedSequence(target.sgrna_seq || target.display_sgrna_seq);
-      return sequence ? `sequence:${sequence}` : `legacy-name:${target.target_id}`;
-    };
     let totalAmb = 0, totalRaw = 0, totalPhred = 0, totalAnchor = 0;
     for (const fileResult of allResults) {
       const mrd: MultiReferenceResponse | undefined = fileResult?.multi_reference_result;
@@ -676,14 +673,11 @@ export class AppStateService {
           ex.gene = mergeAliases(ex.gene, geneRes.gene);
           ex.assigned_read_count += geneRes.assigned_read_count;
           if (ex.analysis_result?.targets && geneRes.analysis_result?.targets) {
-            const existingTargets = new Map<string, any>(ex.analysis_result.targets.map((target: any) => [targetKey(target), target]));
             geneRes.analysis_result.targets.forEach((newT: any) => {
-              const targetIdentity = targetKey(newT);
-              const extT = existingTargets.get(targetIdentity);
+              const extT = findMergeTarget(ex.analysis_result.targets, newT, geneRes.analysis_result.targets);
               if (!extT) {
                 const copy = JSON.parse(JSON.stringify(newT));
                 ex.analysis_result.targets.push(copy);
-                existingTargets.set(targetIdentity, copy);
                 return;
               }
               extT.target_id = mergeAliases(extT.target_id, newT.target_id);
@@ -780,6 +774,9 @@ export class AppStateService {
 
       this.isMultiReference = true;
       this.multiFileCount = fileScopes.length;
+      // Rebuild from the per-file evidence rather than trusting an old exported
+      // Merged sheet, which may contain counts produced by an earlier merge bug.
+      if (fileScopes.length) this.handleAnalysisComplete({ results: this.allFileResults });
       this.selectedScopeIndex = -1;
 
       if (data.curationConfig) {

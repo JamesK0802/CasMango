@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { findMergeTarget } from '../models/result-merge';
 import { CurationConfig, targetKey, groupKey } from '../models/curation.model';
 import {
   GeneResult,
@@ -113,14 +114,11 @@ export class CurationService {
           .filter(t => !config.excludedTargets.includes(targetKey(g.gene, t.target_id)))
           .map(t => this.recalcTarget(t, g.gene, config));
 
-        // Recompute gene-level assigned_read_count from included targets
-        const totalAssigned = filteredTargets.reduce(
-          (s, t) => s + (t.summary?.aligned_reads ?? 0), 0
-        );
-
         return {
           ...g,
-          assigned_read_count: totalAssigned,
+          // Reference assignment counts unique reads before target analysis.
+          // Target counts overlap; summing them double-counts multi-target reads.
+          assigned_read_count: g.assigned_read_count,
           analysis_result: {
             ...g.analysis_result,
             targets: filteredTargets
@@ -232,10 +230,6 @@ export class CurationService {
       const kind = gene.is_rescued_derived ? 'rescued' : gene.is_ambiguous_derived ? 'ambiguous' : 'normal';
       return `${kind}:${sequence ? `sequence:${sequence}` : `legacy-name:${gene.gene}`}`;
     };
-    const targetKey = (target: any) => {
-      const sequence = normalized(target.sgrna_seq || target.display_sgrna_seq);
-      return sequence ? `sequence:${sequence}` : `legacy-name:${target.target_id}`;
-    };
 
     for (const fileResult of fileResults) {
       const mrd: MultiReferenceResponse | undefined = fileResult?.multi_reference_result;
@@ -249,14 +243,11 @@ export class CurationService {
           ex.assigned_read_count += geneRes.assigned_read_count;
 
           if (ex.analysis_result?.targets && geneRes.analysis_result?.targets) {
-            const existingTargets = new Map<string, any>(ex.analysis_result.targets.map((target: any) => [targetKey(target), target]));
             geneRes.analysis_result.targets.forEach((newT: any) => {
-              const targetIdentity = targetKey(newT);
-              const extT = existingTargets.get(targetIdentity);
+              const extT = findMergeTarget(ex.analysis_result.targets, newT, geneRes.analysis_result.targets);
               if (!extT) {
                 const copy = JSON.parse(JSON.stringify(newT));
                 ex.analysis_result.targets.push(copy);
-                existingTargets.set(targetIdentity, copy);
                 return;
               }
               extT.target_id = aliases(extT.target_id, newT.target_id);

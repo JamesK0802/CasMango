@@ -214,7 +214,7 @@
     <div class="gene-info-stripe" id="guide-read-flow-stripe" *ngIf="state.currentGene" [class.mobile-open]="mobileGeneInfoOpen">
       <span class="gene-info-item"><strong>Gene:</strong> {{ state.currentGene.gene }}</span>
       <span class="gene-info-sep">|</span>
-      <span class="gene-info-item"><strong>Assigned Reads:</strong> {{ state.currentGene.assigned_read_count | number
+      <span class="gene-info-item" title="Unique reads assigned to this reference before target/group curation. A read evaluated at multiple targets is counted once."><strong>Assigned Reads:</strong> {{ state.currentGene.assigned_read_count | number
         }}</span>
       <span class="gene-info-sep">|</span>
       <span class="gene-info-item ambiguous"><strong>Ambiguous Excluded:</strong> {{ state.ambiguousReadCount | number

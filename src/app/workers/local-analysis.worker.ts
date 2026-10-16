@@ -24,6 +24,7 @@ import { findGrnaCutSite, extractWindow, cutIndexInWindow, isReadUsable } from '
 import { GenePayload } from './core/multi-reference-assigner';
 import { runBenchmark } from './core/benchmark-pipeline';
 import { IlluminaFilePair } from '../models/illumina.model';
+import { findMergeTarget } from '../models/result-merge';
 import { buildIlluminaPseudoReads, fastqReadsToString, preprocessIlluminaReads } from './core/illumina-preprocessor';
 
 let cancelled = false;
@@ -36,10 +37,6 @@ const geneResultKey = (gene: any): string => {
   const sequence = normalizedSequence(gene.reference_sequence);
   const kind = gene.is_rescued_derived ? 'rescued' : gene.is_ambiguous_derived ? 'ambiguous' : 'normal';
   return `${kind}:${sequence ? `sequence:${sequence}` : `legacy-name:${gene.gene}`}`;
-};
-const targetResultKey = (target: any): string => {
-  const sequence = normalizedSequence(target.sgrna_seq || target.display_sgrna_seq);
-  return sequence ? `sequence:${sequence}` : `legacy-name:${target.target_id}`;
 };
 
 // Files below this size already run reliably through the normal in-memory
@@ -133,17 +130,14 @@ function mergeFileResult(target: FileResult | null, source: FileResult): FileRes
     }
     gene.gene = mergeAliases(gene.gene, incomingGene.gene);
     gene.assigned_read_count += incomingGene.assigned_read_count || 0;
-    const targets = new Map<string, any>((gene.analysis_result.targets || []).map((item: any) => [targetResultKey(item), item]));
     for (const incomingTarget of incomingGene.analysis_result.targets || []) {
-      const targetIdentity = targetResultKey(incomingTarget);
-      const existing = targets.get(targetIdentity);
+      const existing = findMergeTarget(gene.analysis_result.targets || [], incomingTarget, incomingGene.analysis_result.targets || []);
       if (existing) {
         existing.target_id = mergeAliases(existing.target_id, incomingTarget.target_id);
         mergeTargetResult(existing, incomingTarget);
       } else {
         const copy = structuredClone(incomingTarget);
         gene.analysis_result.targets.push(copy);
-        targets.set(targetIdentity, copy);
       }
     }
     if (incomingGene.analysis_result.multi_target_summary) {
