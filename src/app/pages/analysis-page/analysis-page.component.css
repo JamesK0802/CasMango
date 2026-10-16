@@ -198,3 +198,17 @@
   .collection-modal { padding: 16px; }
   .collection-modal-footer { flex-wrap: wrap; }
 }
+.reorderable-file { cursor: grab; position: relative; }
+.reorderable-file:active { cursor: grabbing; }
+.file-drag-handle { color: #94a3b8; margin-right: 8px; font-size: 18px; flex-shrink: 0; user-select: none; }
+.file-dragging { opacity: .45; }
+.drop-before { box-shadow: inset 0 2px #d97706; }
+.drop-after { box-shadow: inset 0 -2px #d97706; }
+.collection-sort-button {
+  display: inline-flex; align-items: center; gap: 8px; width: 100%; padding: 0;
+  border: none; background: transparent; color: inherit; font: inherit; font-weight: inherit;
+  text-align: left; cursor: pointer;
+}
+.collection-sort-button span { color: #94a3b8; }
+.collection-sort-button:focus-visible { outline: 2px solid #d97706; outline-offset: 4px; }
+.collection-sort-button:disabled { opacity: .5; cursor: default; }

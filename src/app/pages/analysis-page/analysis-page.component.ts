@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Subscription, debounceTime } from 'rxjs';
 import { collectDroppedEntries, copySequenceFiles, DroppedEntry, isSequenceFile, LocalDirectory, pastedFileStems, sequenceFilenameParts, validCollectionName, validFileStem } from '../../models/sequence-file-io';
+import { compareSequenceNames, moveSequenceFile } from '../../models/sequence-file-order';
 import { findGrnaCutSite, extractWindow, cutIndexInWindow } from '../../workers/core/classifier';
 import { ReferenceMatcher as SequenceMatcher, compareReferences, rememberComparison, setComparisonCacheLimit, ReferenceComparison } from '../../workers/core/reference-comparison';
 import {
@@ -135,6 +136,10 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   changeCollectionFileNames = false;
   collectionLocation: LocalDirectory | null = null;
   collectionRows: Array<{ file: File; currentName: string; newName: string; extension: string }> = [];
+  collectionSort: { key: 'currentName' | 'newName'; ascending: boolean } | null = null;
+  draggedSequenceFile: File | null = null;
+  sequenceDropTarget: File | null = null;
+  sequenceDropAfter = false;
   collectionMessage = '';
   fileActionMessage = '';
   private readonly sequencePaths = new WeakMap<File, string>();
@@ -150,6 +155,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   sequenceFilePath(file: File): string { return this.sequencePaths.get(file) || file.webkitRelativePath || file.name; }
 
   openCollectFilesDialog(): void {
+    this.collectionSort = null;
     this.collectionRows = this.uploadedSequenceFiles.map(file => {
       const { stem, extension } = sequenceFilenameParts(file.name);
       return { file, currentName: stem, newName: stem, extension };
@@ -164,6 +170,14 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
 
   closeCollectFilesDialog(): void {
     if (!this.isCopyingFiles) this.showCollectFilesDialog = false;
+  }
+
+  sortCollectionNames(key: 'currentName' | 'newName'): void {
+    if (this.isCopyingFiles) return;
+    const ascending = this.collectionSort?.key === key ? !this.collectionSort.ascending : true;
+    this.collectionSort = { key, ascending };
+    this.collectionRows = [...this.collectionRows].sort((a, b) =>
+      compareSequenceNames(a[key], b[key]) * (ascending ? 1 : -1));
   }
 
   collectionDialogKeydown(event: KeyboardEvent): void {
@@ -1152,12 +1166,49 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     if (removed?.key === this.state.activeReferenceKey) this.state.selectReferenceConfig('default');
   }
 
+  startSequenceFileDrag(event: DragEvent, file: File): void {
+    event.stopPropagation();
+    this.draggedSequenceFile = file;
+    event.dataTransfer?.setData('application/x-casmango-file-order', 'move');
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  allowSequenceFileDrop(event: DragEvent, target: File): void {
+    event.preventDefault(); event.stopPropagation();
+    if (!this.draggedSequenceFile || !event.dataTransfer?.types.includes('application/x-casmango-file-order')) return;
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.sequenceDropTarget = target;
+    this.sequenceDropAfter = event.clientY >= bounds.top + bounds.height / 2;
+    event.dataTransfer.dropEffect = 'move';
+  }
+
+  dropSequenceFile(event: DragEvent, target: File): void {
+    event.preventDefault(); event.stopPropagation();
+    if (this.draggedSequenceFile && event.dataTransfer?.getData('application/x-casmango-file-order')) {
+      const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      this.state.selectedFiles = moveSequenceFile(this.state.selectedFiles, this.draggedSequenceFile, target,
+        event.clientY >= bounds.top + bounds.height / 2);
+      this.endSequenceFileDrag();
+    } else {
+      this.endSequenceFileDrag();
+      void this.onFileDropped(event);
+    }
+  }
+
+  endSequenceFileDrag(): void {
+    this.draggedSequenceFile = null;
+    this.sequenceDropTarget = null;
+  }
+
   private addSequencingFiles(files: File[]): void {
     const fastqFiles = files.filter(file => isSequenceFile(file.name));
+    if (!fastqFiles.length) return;
     if (this.sequencingPlatform === 'illumina') {
-      this.state.illuminaPairs = addFilesToIlluminaPairs(this.state.illuminaPairs, fastqFiles, file => this.sequenceFilePath(file));
+      this.state.illuminaPairs = addFilesToIlluminaPairs(this.state.illuminaPairs, fastqFiles, file => this.sequenceFilePath(file))
+        .sort((a, b) => compareSequenceNames(displayIlluminaPairName(a), displayIlluminaPairName(b)));
     } else {
-      this.state.selectedFiles.push(...fastqFiles);
+      this.state.selectedFiles = [...this.state.selectedFiles, ...fastqFiles].sort((a, b) =>
+        compareSequenceNames(a.name, b.name) || compareSequenceNames(this.sequenceFilePath(a), this.sequenceFilePath(b)));
     }
   }
 

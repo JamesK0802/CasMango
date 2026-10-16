@@ -74,7 +74,13 @@
         <p class="file-action-message" *ngIf="isReadingFolders" role="status">Reading folders…</p>
 
         <div class="file-list" *ngIf="sequencingPlatform === 'nanopore' && state.selectedFiles.length > 0">
-          <div *ngFor="let file of state.selectedFiles; let i = index" class="file-item">
+          <div *ngFor="let file of state.selectedFiles; let i = index" class="file-item reorderable-file" draggable="true"
+            (dragstart)="startSequenceFileDrag($event, file)" (dragend)="endSequenceFileDrag()"
+            (dragover)="allowSequenceFileDrop($event, file)" (drop)="dropSequenceFile($event, file)"
+            [class.file-dragging]="draggedSequenceFile === file"
+            [class.drop-before]="sequenceDropTarget === file && !sequenceDropAfter && draggedSequenceFile !== file"
+            [class.drop-after]="sequenceDropTarget === file && sequenceDropAfter && draggedSequenceFile !== file">
+            <span class="file-drag-handle" aria-hidden="true" title="Drag to reorder">⠿</span>
             <span class="file-name" [title]="sequenceFilePath(file)">{{ file.name }}</span>
             <span class="file-size">({{ file.size / 1024 / 1024 | number:'1.1-1' }} MB)</span>
             <button type="button" class="btn-remove" (click)="removeFile(i)">&times;</button>
@@ -693,7 +699,14 @@
       <label class="collection-rename-toggle"><input type="checkbox" [(ngModel)]="changeCollectionFileNames" [disabled]="isCopyingFiles" /> Change file name</label>
       <div class="collection-name-table" *ngIf="changeCollectionFileNames">
         <table>
-          <thead><tr><th>Current file name</th><th>New file name</th></tr></thead>
+          <thead><tr>
+            <th [attr.aria-sort]="collectionSort?.key === 'currentName' ? (collectionSort?.ascending ? 'ascending' : 'descending') : 'none'">
+              <button type="button" class="collection-sort-button" (click)="sortCollectionNames('currentName')" [disabled]="isCopyingFiles">Current file name <span aria-hidden="true">{{ collectionSort?.key === 'currentName' ? (collectionSort?.ascending ? '↑' : '↓') : '↕' }}</span></button>
+            </th>
+            <th [attr.aria-sort]="collectionSort?.key === 'newName' ? (collectionSort?.ascending ? 'ascending' : 'descending') : 'none'">
+              <button type="button" class="collection-sort-button" (click)="sortCollectionNames('newName')" [disabled]="isCopyingFiles">New file name <span aria-hidden="true">{{ collectionSort?.key === 'newName' ? (collectionSort?.ascending ? '↑' : '↓') : '↕' }}</span></button>
+            </th>
+          </tr></thead>
           <tbody>
             <tr *ngFor="let row of collectionRows; let i = index">
               <td [title]="sequenceFilePath(row.file)">{{ row.currentName }}</td>
