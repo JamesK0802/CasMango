@@ -1,4 +1,4 @@
-import { Component, ChangeDetectorRef, NgZone, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectorRef, HostListener, NgZone, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -7,12 +7,15 @@ import { Chart } from 'chart.js/auto';
 
 import { MutationGroup } from '../../models/analysis.model';
 import { resolveAnnotationCutSite } from './annotation-cut-site';
+import { groupKey } from '../../models/curation.model';
+import { CurationItem, CurationItemKind, CurationSweep, curationRange } from '../../models/curation-sweep';
 
 @Component({
   selector: 'app-result-dashboard',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './result-dashboard.component.html'
+  templateUrl: './result-dashboard.component.html',
+  styleUrl: './result-dashboard.component.css'
 })
 export class ResultDashboardComponent implements OnInit, OnDestroy {
   isSaving = false;
@@ -28,6 +31,115 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   scrollLeft = 0;
 
   visibleGroupCount = 10;
+  curationSweep: CurationSweep | null = null;
+  private sweepPointer: { x: number; y: number; id: number } | null = null;
+  private sweepFrame = 0;
+  private suppressCurationClickUntil = 0;
+  private curationAnchor: { kind: CurationItemKind; key: string; context: string; order: string[] } | null = null;
+
+  groupCurationKey(group: MutationGroup): string {
+    return groupKey(this.state.currentGene?.gene || '', this.state.selectedTarget?.target_id || '', group.read_inner);
+  }
+
+  isCurationPending(kind: CurationItemKind, key: string): boolean {
+    return this.curationSweep?.kind === kind && !!this.curationSweep.items.has(key);
+  }
+
+  private curationContext(kind: CurationItemKind): string {
+    return `${this.state.activeMode}:${this.state.activeTabId}:${kind === 'file' ? '' : this.state.selectedScopeIndex}:${kind === 'group' ? this.state.currentGene?.gene + ':' + this.state.selectedTarget?.target_id : ''}`;
+  }
+
+  private curationOrder(kind: CurationItemKind): string[] {
+    return [...new Set(Array.from(document.querySelectorAll<HTMLElement>(`[data-curation-kind="${kind}"]`))
+      .filter(element => element.getClientRects().length > 0).map(element => element.dataset['curationKey']!))];
+  }
+
+  beginCurationSweep(event: PointerEvent, kind: CurationItemKind, key: string, currentlyExcluded: boolean): void {
+    if (!this.state.isCuratedView || event.button !== 0 || event.shiftKey) return;
+    event.preventDefault(); event.stopPropagation();
+    this.curationSweep = new CurationSweep(kind, !currentlyExcluded);
+    this.curationSweep.add({ kind, key });
+    this.curationAnchor = { kind, key, context: this.curationContext(kind), order: this.curationOrder(kind) };
+    this.sweepPointer = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    this.ngZone.runOutsideAngular(() => this.sweepFrame = requestAnimationFrame(() => this.advanceCurationSweep()));
+  }
+
+  @HostListener('document:pointermove', ['$event'])
+  moveCurationSweep(event: PointerEvent): void {
+    if (!this.sweepPointer || event.pointerId !== this.sweepPointer.id) return;
+    const previous = { ...this.sweepPointer };
+    const steps = Math.min(200, Math.max(1, Math.ceil(Math.hypot(event.clientX - previous.x, event.clientY - previous.y) / 12)));
+    for (let i = 1; i <= steps; i++) {
+      this.sweepPointer.x = previous.x + (event.clientX - previous.x) * i / steps;
+      this.sweepPointer.y = previous.y + (event.clientY - previous.y) * i / steps;
+      this.visitCurationItem();
+    }
+  }
+
+  private visitCurationItem(): void {
+    if (!this.curationSweep || !this.sweepPointer) return;
+    const element = document.elementFromPoint(this.sweepPointer.x, this.sweepPointer.y)?.closest<HTMLElement>('[data-curation-kind]');
+    const kind = element?.dataset['curationKind'] as CurationItemKind | undefined;
+    const key = element?.dataset['curationKey'];
+    if (kind && key !== undefined && this.curationSweep.add({ kind, key })) this.ngZone.run(() => this.cdr.detectChanges());
+  }
+
+  private advanceCurationSweep(): void {
+    if (!this.curationSweep || !this.sweepPointer) return;
+    const { x, y } = this.sweepPointer;
+    const underPointer = document.elementFromPoint(x, y);
+    const strip = underPointer?.closest<HTMLElement>('.scope-tabs, .gene-tabs');
+    if (strip && strip.scrollWidth > strip.clientWidth) {
+      const rect = strip.getBoundingClientRect();
+      if (x > rect.right - 28) strip.scrollLeft += 9;
+      else if (x < rect.left + 28) strip.scrollLeft -= 9;
+    }
+    if (y > window.innerHeight - 35) window.scrollBy(0, 9);
+    else if (y < 35) window.scrollBy(0, -9);
+    // Hit-test continuously, including while trackpad scrolling without pointer movement.
+    this.visitCurationItem();
+    this.sweepFrame = requestAnimationFrame(() => this.advanceCurationSweep());
+  }
+
+  @HostListener('document:pointerup', ['$event'])
+  finishCurationSweep(event: PointerEvent): void {
+    if (!this.curationSweep || event.pointerId !== this.sweepPointer?.id) return;
+    const sweep = this.curationSweep;
+    this.cancelCurationSweep();
+    this.suppressCurationClickUntil = Date.now() + 500;
+    this.applyCurationItems([...sweep.items.values()], sweep.excluded);
+  }
+
+  @HostListener('document:pointercancel')
+  @HostListener('window:blur')
+  cancelCurationSweep(): void {
+    if (this.curationSweep) this.suppressCurationClickUntil = Date.now() + 500;
+    if (this.sweepFrame) cancelAnimationFrame(this.sweepFrame);
+    this.sweepFrame = 0; this.sweepPointer = null; this.curationSweep = null;
+  }
+
+  @HostListener('document:keydown.escape')
+  escapeCurationSweep(): void { this.cancelCurationSweep(); }
+
+  onCurationClick(event: MouseEvent, kind: CurationItemKind, key: string, currentlyExcluded: boolean): void {
+    event.preventDefault(); event.stopPropagation();
+    if (!this.state.isCuratedView || (event.detail > 0 && Date.now() < this.suppressCurationClickUntil)) return;
+    let keys = [key];
+    const context = this.curationContext(kind);
+    if (event.shiftKey && this.curationAnchor?.kind === kind && this.curationAnchor.context === context) {
+      const order = this.curationAnchor.order.includes(key) ? this.curationAnchor.order : this.curationOrder(kind);
+      keys = curationRange(order, this.curationAnchor.key, key);
+    }
+    if (!event.shiftKey) this.curationAnchor = { kind, key, context, order: this.curationOrder(kind) };
+    this.applyCurationItems(keys.map(value => ({ kind, key: value })), !currentlyExcluded);
+  }
+
+  private applyCurationItems(items: CurationItem[], excluded: boolean): void {
+    this.state.setCurationExclusions(items, excluded);
+    this.state.destroyCharts();
+    this.cdr.detectChanges();
+    this.refreshDashboard();
+  }
 
   get visibleTopGroups(): MutationGroup[] {
     const all = this.state.selectedTarget?.top_groups || [];
@@ -97,6 +209,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   ngOnDestroy() {
+    this.cancelCurationSweep();
     this.destroy$.next();
     this.destroy$.complete();
     this.state.destroyCharts();

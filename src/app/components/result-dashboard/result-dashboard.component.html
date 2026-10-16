@@ -110,13 +110,18 @@
   <div class="standard-result-view" [hidden]="resultView === 'homoeolog'">
 
   <!-- ── Result Scope Tabs (Merged vs Per-File) ── -->
-  <div class="result-scope-wrapper" *ngIf="state.isMultiReference && state.multiFileCount > 1">
-    <div class="scope-tabs">
+  <p class="curation-sweep-hint" *ngIf="state.isCuratedView">Hold × and drag across items, scroll while holding, or Shift-click a range.</p>
+  <div class="curation-sweep-status" *ngIf="curationSweep" role="status">Release to {{ curationSweep.excluded ? 'exclude' : 'restore' }} {{ curationSweep.items.size }} {{ curationSweep.kind === 'gene' ? 'reference(s)' : curationSweep.kind + '(s)' }} · Esc to cancel</div>
+
+  <div class="result-scope-wrapper" *ngIf="state.isMultiReference && state.allFileResults.length > 1">
+    <div class="scope-tabs" [class.curatable-strip]="state.isCuratedView">
       <button type="button" class="scope-tab-btn" [class.active]="state.selectedScopeIndex === -1"
         (click)="selectScope(-1)">
         All Merged
       </button>
       <button type="button" class="scope-tab-btn file-curate-tab" *ngFor="let fr of state.allFileResults; let i = index"
+        data-curation-kind="file" [attr.data-curation-key]="extractFileName(fr.fastq_file)"
+        [class.curation-pending]="isCurationPending('file', extractFileName(fr.fastq_file))"
         [class.active]="state.selectedScopeIndex === i"
         [class.excluded-tab]="isFileExcluded(fr)"
         (click)="selectScope(i)">
@@ -133,7 +138,10 @@
         
         <!-- Exclude Toggle -->
         <span *ngIf="state.isCuratedView" class="exclude-toggle" [class.is-excluded]="isFileExcluded(fr)"
-          (click)="toggleFile(fr); $event.stopPropagation()">
+          role="button" tabindex="0" aria-label="Exclude or restore file"
+          (pointerdown)="beginCurationSweep($event, 'file', extractFileName(fr.fastq_file), isFileExcluded(fr))"
+          (click)="onCurationClick($event, 'file', extractFileName(fr.fastq_file), isFileExcluded(fr))"
+          (keydown.enter)="toggleFile(fr); $event.stopPropagation()" (keydown.space)="toggleFile(fr); $event.preventDefault(); $event.stopPropagation()">
           {{ isFileExcluded(fr) ? '↩' : '✕' }}
         </span>
       </button>
@@ -145,39 +153,55 @@
     <div class="gene-tabs" role="tablist">
       <!-- Normal genes (included) -->
       <button *ngFor="let g of state.normalGenes; let i = index" role="tab" class="gene-tab-btn"
+        data-curation-kind="gene" [attr.data-curation-key]="g.gene" [class.curation-pending]="isCurationPending('gene', g.gene)"
         [class.active]="state.genes.indexOf(g) === state.selectedGeneIndex"
         (click)="selectGene(state.genes.indexOf(g))">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
         <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
-          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
+          role="button" tabindex="0" aria-label="Exclude reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', g.gene, false)"
+          (click)="onCurationClick($event, 'gene', g.gene, false)"
+          (keydown.enter)="toggleGene(g.gene); $event.stopPropagation()" (keydown.space)="toggleGene(g.gene); $event.preventDefault(); $event.stopPropagation()">✕</span>
       </button>
 
       <button *ngFor="let g of state.rescuedGenes; let i = index" role="tab" class="gene-tab-btn rescued-derived"
+        data-curation-kind="gene" [attr.data-curation-key]="g.gene" [class.curation-pending]="isCurationPending('gene', g.gene)"
         [class.active]="state.genes.indexOf(g) === state.selectedGeneIndex" (click)="selectGene(state.genes.indexOf(g))"
         style="background-color: #e8f5e9; border-color: #a5d6a7;">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
         <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
-          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
+          role="button" tabindex="0" aria-label="Exclude reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', g.gene, false)"
+          (click)="onCurationClick($event, 'gene', g.gene, false)"
+          (keydown.enter)="toggleGene(g.gene); $event.stopPropagation()" (keydown.space)="toggleGene(g.gene); $event.preventDefault(); $event.stopPropagation()">✕</span>
       </button>
 
       <button *ngFor="let g of state.ambiguousGenes; let i = index" role="tab" class="gene-tab-btn ambiguous-derived"
+        data-curation-kind="gene" [attr.data-curation-key]="g.gene" [class.curation-pending]="isCurationPending('gene', g.gene)"
         [class.active]="state.genes.indexOf(g) === state.selectedGeneIndex"
         (click)="selectGene(state.genes.indexOf(g))">
         <span class="gene-tab-label">{{ g.gene }}</span>
         <span class="gene-tab-count">{{ g.assigned_read_count | number }} reads</span>
         <span *ngIf="state.isCuratedView" class="exclude-toggle gene-exclude"
-          (click)="toggleGene(g.gene); $event.stopPropagation()">✕</span>
+          role="button" tabindex="0" aria-label="Exclude reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', g.gene, false)"
+          (click)="onCurationClick($event, 'gene', g.gene, false)"
+          (keydown.enter)="toggleGene(g.gene); $event.stopPropagation()" (keydown.space)="toggleGene(g.gene); $event.preventDefault(); $event.stopPropagation()">✕</span>
       </button>
 
       <!-- Excluded genes (curated mode only) -->
       <button *ngFor="let gName of excludedGeneNames" role="tab"
+        data-curation-kind="gene" [attr.data-curation-key]="gName" [class.curation-pending]="isCurationPending('gene', gName)"
         class="gene-tab-btn excluded-tab"
         (click)="toggleGene(gName)">
         <span class="gene-tab-label">{{ gName }}</span>
         <span class="gene-tab-count">excluded</span>
-        <span class="exclude-toggle gene-exclude is-excluded">↩</span>
+        <span class="exclude-toggle gene-exclude is-excluded" role="button" tabindex="0" aria-label="Restore reference"
+          (pointerdown)="beginCurationSweep($event, 'gene', gName, true)"
+          (click)="onCurationClick($event, 'gene', gName, true)"
+          (keydown.enter)="toggleGene(gName); $event.stopPropagation()" (keydown.space)="toggleGene(gName); $event.preventDefault(); $event.stopPropagation()">↩</span>
       </button>
     </div>
 
@@ -432,9 +456,12 @@
       <div class="unified-row" *ngFor="let group of visibleTopGroups"
         [class.excluded-row]="isGroupExcludedObj(group)"
         style="border-bottom: 1px dotted #e0e0e0; background: white;">
-        <div class="sticky-left">
+        <div class="sticky-left" data-curation-kind="group" [attr.data-curation-key]="groupCurationKey(group)" [class.curation-pending]="isCurationPending('group', groupCurationKey(group))">
           <span *ngIf="state.isCuratedView" class="exclude-btn-group"
-            (click)="toggleGroup(group)"
+            role="button" tabindex="0" aria-label="Exclude or restore group"
+            (pointerdown)="beginCurationSweep($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (click)="onCurationClick($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (keydown.enter)="toggleGroup(group); $event.stopPropagation()" (keydown.space)="toggleGroup(group); $event.preventDefault(); $event.stopPropagation()"
             [class.is-excluded]="isGroupExcludedObj(group)"
             title="Exclude/restore this group">
             {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
@@ -507,15 +534,10 @@
       </div>
     </div>
 
-    <!-- Desktop Load More Button -->
-    <div *ngIf="hasMoreGroups" style="display: flex; justify-content: center; padding: 12px 16px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
-      <button type="button" class="app-btn app-btn-secondary app-btn-sm" (click)="loadMoreGroups()" style="display: flex; align-items: center; gap: 6px; font-weight: 600;">
-        <span>더보기 (+10개 그룹, 남은 그룹: {{ remainingGroupCount }}개)</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </button>
-    </div>
+  </div>
+  <div *ngIf="hasMoreGroups" class="annotation-more-footer desktop-annotation-more">
+    <span>{{ remainingGroupCount | number }} groups remaining</span>
+    <button type="button" class="annotation-more-button" (click)="loadMoreGroups()">Show {{ remainingGroupCount < 10 ? remainingGroupCount : 10 }} more <span aria-hidden="true">⌄</span></button>
   </div>
 
   <div class="mobile-annotation-list">
@@ -548,9 +570,13 @@
       <!-- Mutation Groups -->
       <ng-container *ngFor="let group of visibleTopGroups">
         <!-- Group Header -->
-        <div class="mobile-group-summary" [class.excluded-row]="isGroupExcludedObj(group)">
+        <div class="mobile-group-summary" [class.excluded-row]="isGroupExcludedObj(group)"
+          data-curation-kind="group" [attr.data-curation-key]="groupCurationKey(group)" [class.curation-pending]="isCurationPending('group', groupCurationKey(group))">
           <span *ngIf="state.isCuratedView" class="exclude-btn-group"
-            (click)="toggleGroup(group)"
+            role="button" tabindex="0" aria-label="Exclude or restore group"
+            (pointerdown)="beginCurationSweep($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (click)="onCurationClick($event, 'group', groupCurationKey(group), isGroupExcludedObj(group))"
+            (keydown.enter)="toggleGroup(group); $event.stopPropagation()" (keydown.space)="toggleGroup(group); $event.preventDefault(); $event.stopPropagation()"
             [class.is-excluded]="isGroupExcludedObj(group)"
             title="Exclude/restore this group">
             {{ isGroupExcludedObj(group) ? '↩' : '✕' }}
@@ -604,10 +630,9 @@
     </div>
 
     <!-- Mobile Load More Button -->
-    <div *ngIf="hasMoreGroups" style="display: flex; justify-content: center; padding: 10px 14px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
-      <button type="button" class="app-btn app-btn-secondary app-btn-sm" (click)="loadMoreGroups()" style="width: 100%; justify-content: center; font-weight: 600;">
-        더보기 (+10개 그룹, 남은 그룹: {{ remainingGroupCount }}개)
-      </button>
+    <div *ngIf="hasMoreGroups" class="annotation-more-footer">
+      <span>{{ remainingGroupCount | number }} groups remaining</span>
+      <button type="button" class="annotation-more-button" (click)="loadMoreGroups()">Show {{ remainingGroupCount < 10 ? remainingGroupCount : 10 }} more <span aria-hidden="true">⌄</span></button>
     </div>
   </div>
 </div>

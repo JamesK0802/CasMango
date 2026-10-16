@@ -10,6 +10,7 @@ import { GeneResult, MultiReferenceResponse, BenchmarkRow, BenchmarkResult } fro
 import { CurationConfig, emptyCurationConfig, targetKey, groupKey } from '../models/curation.model';
 import { Chart } from 'chart.js/auto';
 import { IlluminaFilePair } from '../models/illumina.model';
+import { CurationItem } from '../models/curation-sweep';
 
 /** Independent result data container */
 export interface ResultSlot {
@@ -881,6 +882,25 @@ export class AppStateService {
     const idx = this.curationConfig.excludedFiles.indexOf(fileName);
     if (idx >= 0) this.curationConfig.excludedFiles.splice(idx, 1);
     else this.curationConfig.excludedFiles.push(fileName);
+    this.recalculateCuratedView();
+  }
+
+  setCurationExclusions(items: CurationItem[], excluded: boolean): void {
+    if (!this.isCuratedView || !this.curationConfig || !items.length) return;
+    const fields = { file: 'excludedFiles', gene: 'excludedGenes', group: 'excludedGroups' } as const;
+    const sets = {
+      file: new Set(this.curationConfig.excludedFiles),
+      gene: new Set(this.curationConfig.excludedGenes),
+      group: new Set(this.curationConfig.excludedGroups),
+    };
+    let changed = false;
+    for (const item of items) {
+      const set = sets[item.kind];
+      if (excluded && !set.has(item.key)) { set.add(item.key); changed = true; }
+      if (!excluded && set.delete(item.key)) changed = true;
+    }
+    if (!changed) return;
+    for (const kind of ['file', 'gene', 'group'] as const) this.curationConfig[fields[kind]] = [...sets[kind]];
     this.recalculateCuratedView();
   }
 
