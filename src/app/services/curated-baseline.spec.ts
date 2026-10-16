@@ -1,5 +1,5 @@
 import '@angular/compiler';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExcelJS from 'exceljs';
 import { ExcelExportService, ExportParams, ScopeData } from './excel-export.service';
 import { AppStateService } from './app-state.service';
@@ -34,17 +34,20 @@ describe('saved curated baseline', () => {
 });
 
 describe('exclude groups below', () => {
+  beforeEach(() => vi.stubGlobal('window', { innerWidth: 1200, innerHeight: 800 }));
+  afterEach(() => vi.unstubAllGlobals());
   function fixture() {
     const component = Object.create(ResultDashboardComponent.prototype) as any;
     const groups = Array.from({ length: 35 }, (_, i) => ({ read_inner: `seq${i}` }));
     component.state = { isCuratedView: true, curationConfig: {}, selectedTarget: { target_id: 'T', top_groups: groups },
       currentGene: { gene: 'G' }, isGroupExcluded: (_g: string, _t: string, seq: string) => seq === 'seq12' };
     component.cancelCurationSweep = vi.fn(); component.applyCurationItems = vi.fn();
-    component.excludeBelowDialog = { nativeElement: { showModal: vi.fn(), close: vi.fn() } };
-    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
+    component.cdr = { detectChanges: vi.fn() };
+    component.excludeBelowMenu = { nativeElement: { showPopover: vi.fn(), hidePopover: vi.fn(), querySelector: vi.fn() } };
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), clientX: 100, clientY: 200 };
     return { component, groups, event };
   }
-  it('includes hidden rows, excludes the clicked row, and applies once only after confirmation', () => {
+  it('includes hidden rows and applies once when the context-menu action is selected', () => {
     const { component, groups, event } = fixture();
     component.openExcludeBelow(event, groups[8]);
     expect(component.bulkGroupExclusion.keys).toHaveLength(26);

@@ -31,7 +31,8 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   scrollLeft = 0;
 
   visibleGroupCount = 10;
-  @ViewChild('excludeBelowDialog') excludeBelowDialog?: ElementRef<HTMLDialogElement>;
+  @ViewChild('excludeBelowMenu') excludeBelowMenu?: ElementRef<HTMLDivElement>;
+  bulkMenuPosition = { x: 0, y: 0 };
   bulkGroupExclusion: { keys: string[]; context: string; config: unknown } | null = null;
 
   openExcludeBelow(event: MouseEvent, group: MutationGroup): void {
@@ -46,11 +47,17 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
       keys: groups.slice(index).filter(item => !this.isGroupExcludedObj(item)).map(item => this.groupCurationKey(item)),
       context: this.curationContext('group'), config: this.state.curationConfig
     };
-    this.excludeBelowDialog?.nativeElement.showModal();
+    this.bulkMenuPosition = {
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 278)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 54))
+    };
+    this.cdr.detectChanges();
+    this.excludeBelowMenu?.nativeElement.showPopover();
+    this.excludeBelowMenu?.nativeElement.querySelector<HTMLButtonElement>('button')?.focus();
   }
 
   closeExcludeBelow(): void {
-    this.excludeBelowDialog?.nativeElement.close();
+    this.excludeBelowMenu?.nativeElement.hidePopover();
     this.bulkGroupExclusion = null;
   }
 
@@ -148,7 +155,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   }
 
   @HostListener('document:keydown.escape')
-  escapeCurationSweep(): void { this.cancelCurationSweep(); }
+  escapeCurationSweep(): void { this.cancelCurationSweep(); this.closeExcludeBelow(); }
 
   onCurationClick(event: MouseEvent, kind: CurationItemKind, key: string, currentlyExcluded: boolean): void {
     event.preventDefault(); event.stopPropagation();
