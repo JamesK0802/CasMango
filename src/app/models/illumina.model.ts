@@ -25,6 +25,12 @@ const MATE_TOKENS: RegExp[] = [
 ];
 const TRAILING_READ_NUMBER = /[._-]00\d$/;
 
+function pairingKey(file: File, pathOf: (file: File) => string): string {
+  const path = pathOf(file);
+  const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+  return `${parent}\0${parseIlluminaFilename(file.name).sampleKey}`;
+}
+
 function humanizeSampleName(value: string): string {
   const words = value
     .replace(/[._-]+/g, ' ')
@@ -97,19 +103,21 @@ export function displayIlluminaPairName(pair: Pick<IlluminaFilePair, 'name' | 'r
 
 export function createIlluminaFilePairs(
   files: File[],
-  idFactory: () => string = () => `illumina_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  idFactory: () => string = () => `illumina_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  pathOf: (file: File) => string = file => file.webkitRelativePath || file.name,
 ): IlluminaFilePair[] {
   const pairs: IlluminaFilePair[] = [];
   const byKey = new Map<string, IlluminaFilePair>();
 
   for (const file of files) {
     const info = parseIlluminaFilename(file.name);
-    let pair = info.mate ? byKey.get(info.sampleKey) : undefined;
+    const key = pairingKey(file, pathOf);
+    let pair = info.mate ? byKey.get(key) : undefined;
 
     if (!pair || (info.mate && pair[info.mate])) {
       pair = { id: idFactory(), name: info.sampleName, r1: null, r2: null };
       pairs.push(pair);
-      if (info.mate && !byKey.has(info.sampleKey)) byKey.set(info.sampleKey, pair);
+      if (info.mate && !byKey.has(key)) byKey.set(key, pair);
     }
 
     const slot: IlluminaMateSlot = info.mate || 'r1';
@@ -120,7 +128,7 @@ export function createIlluminaFilePairs(
   return pairs;
 }
 
-export function addFilesToIlluminaPairs(existing: IlluminaFilePair[], files: File[]): IlluminaFilePair[] {
+export function addFilesToIlluminaPairs(existing: IlluminaFilePair[], files: File[], pathOf: (file: File) => string = file => file.webkitRelativePath || file.name): IlluminaFilePair[] {
   const result = existing.map(pair => ({ ...pair }));
   const unplaced: File[] = [];
 
@@ -132,7 +140,7 @@ export function addFilesToIlluminaPairs(existing: IlluminaFilePair[], files: Fil
     }
     const match = result.find(pair => {
       const occupied = pair.r1 || pair.r2;
-      return !pair[info.mate!] && occupied && parseIlluminaFilename(occupied.name).sampleKey === info.sampleKey;
+      return !pair[info.mate!] && occupied && pairingKey(occupied, pathOf) === pairingKey(file, pathOf);
     });
     if (match) {
       match[info.mate] = file;
@@ -142,7 +150,7 @@ export function addFilesToIlluminaPairs(existing: IlluminaFilePair[], files: Fil
     }
   }
 
-  return result.concat(createIlluminaFilePairs(unplaced));
+  return result.concat(createIlluminaFilePairs(unplaced, undefined, pathOf));
 }
 
 export function moveIlluminaMate(

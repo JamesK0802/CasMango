@@ -6,6 +6,7 @@ import { ResultDashboardComponent } from '../../components/result-dashboard/resu
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Subscription, debounceTime } from 'rxjs';
+import { collectDroppedEntries, copySequenceFiles, DroppedEntry, isSequenceFile, LocalDirectory, validCollectionName } from '../../models/sequence-file-io';
 import { findGrnaCutSite, extractWindow, cutIndexInWindow } from '../../workers/core/classifier';
 import { ReferenceMatcher as SequenceMatcher, compareReferences, rememberComparison, setComparisonCacheLimit, ReferenceComparison } from '../../workers/core/reference-comparison';
 import {
@@ -126,6 +127,52 @@ interface ReferenceExcelRow { homoeologName: string; geneName: string; geneSeq: 
   styleUrl: './analysis-page.component.css'
 })
 export class AnalysisPageComponent implements OnInit, OnDestroy {
+  isReadingFolders = false;
+  isCopyingFiles = false;
+  collectionFolderName = 'CasMANGO_inputs';
+  fileActionMessage = '';
+  private readonly sequencePaths = new WeakMap<File, string>();
+
+  get canCopyToFolder(): boolean { return typeof window !== 'undefined' && 'showDirectoryPicker' in window; }
+  get uploadedSequenceFiles(): File[] {
+    const files = this.sequencingPlatform === 'illumina'
+      ? this.state.illuminaPairs.flatMap(pair => [pair.r1, pair.r2].filter((file): file is File => !!file))
+      : this.state.selectedFiles;
+    return [...new Set(files)];
+  }
+
+  sequenceFilePath(file: File): string { return this.sequencePaths.get(file) || file.webkitRelativePath || file.name; }
+
+  async copyUploadedFilesToFolder(): Promise<void> {
+    if (this.isCopyingFiles || !this.canCopyToFolder) return;
+    const files = [...this.uploadedSequenceFiles];
+    if (!files.length) return;
+    if (!validCollectionName(this.collectionFolderName)) {
+      this.fileActionMessage = 'Enter a folder name without slashes or leading/trailing spaces.';
+      return;
+    }
+    const folderName = this.collectionFolderName;
+    this.isCopyingFiles = true;
+    this.fileActionMessage = '';
+    let copied = 0;
+    try {
+      const picker = (window as unknown as { showDirectoryPicker(options: { mode: string }): Promise<LocalDirectory> }).showDirectoryPicker;
+      const parent = await picker.call(window, { mode: 'readwrite' });
+      await copySequenceFiles(parent, folderName, files, count => {
+        copied = count;
+        this.fileActionMessage = `Copying ${count} / ${files.length} files…`;
+        this.cdr.detectChanges();
+      });
+      this.fileActionMessage = `Copied ${copied} files to ${parent.name}/${folderName}. Original files are unchanged.`;
+    } catch (error) {
+      this.fileActionMessage = (error as DOMException).name === 'AbortError' && copied === 0
+        ? 'Copy cancelled.'
+        : `Copy stopped (${copied}/${files.length} completed). ${(error as Error).message} Any partial copies remain in the destination.`;
+    } finally {
+      this.isCopyingFiles = false;
+      this.cdr.detectChanges();
+    }
+  }
   isSaving = false;
   showAutofill = false;
   showPerFileReferences = false;
@@ -991,15 +1038,34 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   onFileSelected(event: any) {
-    this.addSequencingFiles(Array.from(event.target.files || []));
+    const files = Array.from(event.target.files || []) as File[];
+    this.fileActionMessage = files.some(file => isSequenceFile(file.name)) ? '' : 'No supported FASTQ files were found.';
+    this.addSequencingFiles(files);
     event.target.value = '';
   }
 
-  onFileDropped(event: DragEvent) {
+  async onFileDropped(event: DragEvent) {
     event.preventDefault();
     this.state.isDragging = false;
-    if (event.dataTransfer?.files) {
-      this.addSequencingFiles(Array.from(event.dataTransfer.files));
+    if (this.isReadingFolders || !event.dataTransfer) return;
+    // Capture entries synchronously, while the drag data store is still available.
+    const entries = Array.from(event.dataTransfer.items || [])
+      .map(item => item.webkitGetAsEntry() as unknown as DroppedEntry | null).filter((entry): entry is DroppedEntry => !!entry);
+    const fallback = Array.from(event.dataTransfer.files);
+    this.isReadingFolders = true;
+    this.fileActionMessage = '';
+    try {
+      if (entries.length) {
+        const collected = await collectDroppedEntries(entries);
+        for (const item of collected) this.sequencePaths.set(item.file, item.path);
+        this.addSequencingFiles(collected.map(item => item.file));
+        if (!collected.length) this.fileActionMessage = 'No supported FASTQ files were found in the selected folders.';
+      } else this.addSequencingFiles(fallback);
+    } catch (error) {
+      this.fileActionMessage = `Folder could not be fully read; no files from this drop were added. ${(error as Error).message}`;
+    } finally {
+      this.isReadingFolders = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -1012,9 +1078,9 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   private addSequencingFiles(files: File[]): void {
-    const fastqFiles = files.filter(file => /\.(?:fastq|fq)(?:\.gz)?$/i.test(file.name));
+    const fastqFiles = files.filter(file => isSequenceFile(file.name));
     if (this.sequencingPlatform === 'illumina') {
-      this.state.illuminaPairs = addFilesToIlluminaPairs(this.state.illuminaPairs, fastqFiles);
+      this.state.illuminaPairs = addFilesToIlluminaPairs(this.state.illuminaPairs, fastqFiles, file => this.sequenceFilePath(file));
     } else {
       this.state.selectedFiles.push(...fastqFiles);
     }

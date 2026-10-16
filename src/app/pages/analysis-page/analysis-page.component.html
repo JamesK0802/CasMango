@@ -56,9 +56,16 @@
           <span class="hint" *ngIf="sequencingPlatform === 'illumina'">FASTQ / FQ / GZ · R1 and R2 names are paired automatically</span>
         </div>
 
+        <div class="folder-input-actions">
+          <input type="file" #folderInput webkitdirectory multiple hidden (change)="onFileSelected($event)" />
+          <button type="button" class="btn-folder-input" (click)="folderInput.click()" [disabled]="isReadingFolders">Add folder</button>
+          <span class="hint">All subfolders are searched. Add more folders or drag multiple folders here.</span>
+          <span *ngIf="isReadingFolders" role="status">Reading folders…</span>
+        </div>
+
         <div class="file-list" *ngIf="sequencingPlatform === 'nanopore' && state.selectedFiles.length > 0">
           <div *ngFor="let file of state.selectedFiles; let i = index" class="file-item">
-            <span class="file-name">{{ file.name }}</span>
+            <span class="file-name" [title]="sequenceFilePath(file)">{{ file.name }}</span>
             <span class="file-size">({{ file.size / 1024 / 1024 | number:'1.1-1' }} MB)</span>
             <button type="button" class="btn-remove" (click)="removeFile(i)">&times;</button>
           </div>
@@ -85,6 +92,16 @@
             <strong class="illumina-pair-name" [title]="displayIlluminaPairName(pair)">{{ displayIlluminaPairName(pair) }}</strong>
           </article>
         </div>
+        <div class="folder-copy-actions" *ngIf="uploadedSequenceFiles.length > 0">
+          <label for="collection-folder-name">Collect a copy of these input files</label>
+          <div class="folder-copy-controls">
+            <input id="collection-folder-name" type="text" [(ngModel)]="collectionFolderName" [ngModelOptions]="{standalone: true}" [disabled]="isCopyingFiles" placeholder="New folder name" />
+            <button type="button" class="btn-folder-input" (click)="copyUploadedFilesToFolder()" [disabled]="!canCopyToFolder || isCopyingFiles || isReadingFolders">{{ isCopyingFiles ? 'Copying…' : 'Choose location & copy files' }}</button>
+          </div>
+          <span class="hint">Copies the original files into a new folder on your computer. Duplicate names receive a numeric suffix.</span>
+          <span class="hint" *ngIf="!canCopyToFolder">Local folder copying requires a browser with folder-write access, such as desktop Chrome or Edge on HTTPS or localhost.</span>
+        </div>
+        <p class="file-action-message" *ngIf="fileActionMessage" role="status" aria-live="polite">{{ fileActionMessage }}</p>
       </div>
 
       <div class="form-row analysis-controls-grid" id="guide-controls-grid">

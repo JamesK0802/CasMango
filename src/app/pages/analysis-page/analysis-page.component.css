@@ -122,3 +122,29 @@
   :host .homoeolog-target-row { grid-template-columns: 28px minmax(0, .7fr) minmax(0, 1.3fr) 24px; gap: 5px; }
   :host .homoeolog-add-target { margin-right: 29px; }
 }
+.folder-input-actions, .folder-copy-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.folder-input-actions { margin: 10px 0; }
+.folder-copy-actions { margin-top: 16px; }
+.folder-copy-actions label { display: block; font-weight: 600; margin-bottom: 7px; }
+.folder-copy-controls input {
+  min-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+.folder-copy-actions .hint { display: block; margin-top: 6px; }
+.btn-folder-input {
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  color: #1e293b;
+  cursor: pointer;
+}
+.btn-folder-input:disabled { opacity: .55; cursor: default; }
+.file-action-message { margin: 10px 0 0; overflow-wrap: anywhere; }
