@@ -122,15 +122,41 @@
   :host .homoeolog-target-row { grid-template-columns: 28px minmax(0, .7fr) minmax(0, 1.3fr) 24px; gap: 5px; }
   :host .homoeolog-add-target { margin-right: 29px; }
 }
-.folder-input-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+.upload-zone:focus-visible { outline: 2px solid #d97706; outline-offset: 4px; }
+.upload-choice-dialog {
+  width: min(400px, calc(100vw - 32px)); box-sizing: border-box;
+  padding: 22px; border: 1px solid #e2e8f0; border-radius: 18px;
+  background: #fff; color: #1e293b; box-shadow: 0 24px 80px #0f172a26;
 }
-.folder-input-actions { margin: 10px 0; }
-.folder-copy-actions { margin-top: 16px; }
-.folder-copy-actions { margin-bottom: 16px; }
+.upload-choice-dialog::backdrop { background: #0f172a55; backdrop-filter: blur(3px); }
+.upload-choice-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.upload-choice-heading h2 { margin: 0; font-size: 18px; font-weight: 650; }
+.upload-choice-close {
+  width: 28px; height: 28px; border: none; border-radius: 7px;
+  background: transparent; color: #64748b; font-size: 22px; cursor: pointer;
+}
+.upload-choice-close:hover { background: #f1f5f9; }
+.upload-choice-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.upload-choice-option {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 13px;
+  min-height: 122px; padding: 18px 10px; border: 1px solid #e2e8f0; border-radius: 12px;
+  background: #f8fafc; color: #334155; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.upload-choice-option svg { width: 29px; height: 29px; color: #b77922; }
+.upload-choice-option:hover { background: #fffbeb; border-color: #e7bd73; }
+.upload-choice-option:focus-visible, .upload-choice-close:focus-visible, .collect-files-button:focus-visible {
+  outline: 2px solid #d97706; outline-offset: 3px;
+}
+.file-collection-footer { display: flex; justify-content: flex-end; margin-top: 8px; }
+.collect-files-button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
+  border: 1px solid transparent; border-radius: 7px; background: transparent;
+  color: #64748b; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.collect-files-button svg { width: 15px; height: 15px; }
+.collect-files-button:hover { color: #92400e; background: #fffbeb; border-color: #fde6bc; }
+.collect-files-button:disabled { opacity: .5; cursor: default; }
 .btn-folder-input {
   padding: 8px 12px;
   background: #f8fafc;

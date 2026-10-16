@@ -48,20 +48,37 @@
       </div>
 
       <div class="file-upload-section" id="guide-upload-section">
-        <div class="upload-zone" id="guide-upload-zone" [class.dragging]="state.isDragging" (drop)="onFileDropped($event)"
-          (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (click)="fileInput.click()">
-          <input type="file" #fileInput (change)="onFileSelected($event)" multiple hidden accept=".fastq,.fq,.fastq.gz,.fq.gz" />
-          <p><strong>{{ sequencingPlatform === 'illumina' ? 'Upload paired-end files' : 'Upload files' }}</strong></p>
-          <span class="hint" *ngIf="sequencingPlatform === 'nanopore'">FASTQ / FQ / GZ · Multiple files allowed</span>
+        <input type="file" #fileInput (change)="onFileSelected($event)" multiple hidden accept=".fastq,.fq,.fastq.gz,.fq.gz" />
+        <input type="file" #folderInput webkitdirectory multiple hidden (change)="onFileSelected($event)" />
+        <div class="upload-zone" id="guide-upload-zone" role="button" tabindex="0" aria-haspopup="dialog"
+          [attr.aria-disabled]="isReadingFolders" [class.dragging]="state.isDragging" (drop)="onFileDropped($event)"
+          (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)"
+          (click)="!isReadingFolders && uploadChoice.showModal()"
+          (keydown.enter)="!isReadingFolders && uploadChoice.showModal()"
+          (keydown.space)="$event.preventDefault(); !isReadingFolders && uploadChoice.showModal()">
+          <p><strong>Drop files or folders, or click to upload</strong></p>
+          <span class="hint" *ngIf="sequencingPlatform === 'nanopore'">FASTQ / FQ / GZ · Multiple files and folders allowed</span>
           <span class="hint" *ngIf="sequencingPlatform === 'illumina'">FASTQ / FQ / GZ · R1 and R2 names are paired automatically</span>
         </div>
 
-        <div class="folder-input-actions">
-          <input type="file" #folderInput webkitdirectory multiple hidden (change)="onFileSelected($event)" />
-          <button type="button" class="btn-folder-input" (click)="folderInput.click()" [disabled]="isReadingFolders">Upload folder</button>
-          <button *ngIf="uploadedSequenceFiles.length > 0" type="button" class="btn-folder-input" (click)="openCollectFilesDialog()" [disabled]="isReadingFolders || isCopyingFiles">Collect files into folder</button>
-          <span *ngIf="isReadingFolders" role="status">Reading folders…</span>
-        </div>
+        <dialog #uploadChoice class="upload-choice-dialog" aria-labelledby="upload-choice-title"
+          (click)="$event.target === uploadChoice && uploadChoice.close()">
+          <div class="upload-choice-heading">
+            <h2 id="upload-choice-title">Upload</h2>
+            <button type="button" class="upload-choice-close" (click)="uploadChoice.close()" aria-label="Close upload options">×</button>
+          </div>
+          <div class="upload-choice-options">
+            <button type="button" class="upload-choice-option" (click)="uploadChoice.close(); fileInput.click()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10Z"/><path d="M13 3v7h7M8 14h8M8 17h5"/></svg>
+              <span>Upload files</span>
+            </button>
+            <button type="button" class="upload-choice-option" (click)="uploadChoice.close(); folderInput.click()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 2h18"/></svg>
+              <span>Upload folder</span>
+            </button>
+          </div>
+        </dialog>
+        <p class="file-action-message" *ngIf="isReadingFolders" role="status">Reading folders…</p>
 
         <div class="file-list" *ngIf="sequencingPlatform === 'nanopore' && state.selectedFiles.length > 0">
           <div *ngFor="let file of state.selectedFiles; let i = index" class="file-item">
@@ -91,6 +108,12 @@
             </div>
             <strong class="illumina-pair-name" [title]="displayIlluminaPairName(pair)">{{ displayIlluminaPairName(pair) }}</strong>
           </article>
+        </div>
+        <div class="file-collection-footer" *ngIf="uploadedSequenceFiles.length > 0">
+          <button type="button" class="collect-files-button" (click)="openCollectFilesDialog()" [disabled]="isReadingFolders || isCopyingFiles">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 2h18M12 12v6m-3-3 3 3 3-3"/></svg>
+            Collect into folder
+          </button>
         </div>
         <p class="file-action-message" *ngIf="fileActionMessage" role="status" aria-live="polite">{{ fileActionMessage }}</p>
       </div>
