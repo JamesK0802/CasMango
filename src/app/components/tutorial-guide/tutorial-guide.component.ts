@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { FormArray } from '@angular/forms';
 import { AppStateService } from '../../services/app-state.service';
+import { ExcelExportService } from '../../services/excel-export.service';
 
 export interface AdvantageCard {
   title: string;
@@ -37,7 +38,7 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.no-target]="!targetRect" (keydown.escape)="closeGuide()" tabindex="0">
+    <div class="guide-root" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
@@ -930,7 +931,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   viewerLoaded = false;
 
   private rafId: number | null = null;
-  private boundCaptureClick = (event: MouseEvent) => this.onCaptureClick(event);
+  private destroyed = false;
+  private internalAction = false;
+  private pendingAction = false;
+  private actionRevision = 0;
+  private timers = new Set<ReturnType<typeof setTimeout>>();
+  private savedViewer?: AppStateService['viewerSlot'];
+  private savedCuration?: { config: AppStateService['curationConfig']; curated: boolean; original: AppStateService['originalSlotSnapshot']; exported: File | null };
+  private readonly guardedEvents = ['pointerdown', 'mousedown', 'touchstart', 'click', 'dblclick', 'contextmenu', 'dragstart', 'dragover', 'drop', 'keydown', 'focusin'];
+  private boundInteraction = (event: Event) => this.guardInteraction(event);
 
   steps: GuideStep[] = [
     // ── 0. Intro (Overview with Acronym) ──
@@ -1138,7 +1147,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Execution',
       headline: 'Start Analysis & View Outcomes',
       textLines: [
-        '• Click Start Local Analysis to run hardware-accelerated Web Workers with live progress bars.',
+        '• In normal use, Start Local Analysis runs Web Workers with live progress bars. This walkthrough keeps execution locked; use Next: Results Guide to explore the prepared example.',
         '• Export comprehensive results to Excel (.xlsx) and drop them into Result Viewer anytime, or inspect accuracy in the Benchmark tab.',
         '• When you exit the guide, the "Guide Analysis" tab will be closed automatically, restoring your original workspace cleanly.'
       ],
@@ -1429,7 +1438,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         '• Download FASTQ: Export all original sequencing reads or specific mutation group reads as standard FASTQ files.',
         '• All Reads in Workspace: Click to instantly open all reads in the Sequence Viewer (Sequence Workspace) with automatic reference alignment pre-configured.'
       ],
-      targetSelector: '#guide-all-reads-workspace-btn',
+      targetSelector: '#guide-annotation-panel',
       nextButtonText: 'Next: Test Curation View ▶'
     },
 
@@ -1439,13 +1448,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Data Curation',
       headline: 'Interactive Curation View',
       textLines: [
-        '• Click Create Curated View below to test filtering out noise or specific groups.',
-        '• Once activated, click the (✕) toggle buttons on any file tab, gene tab, summary table target row, or individual mutation group row to exclude them.',
+        '• Click Create Curated View below to try a separate, editable result view.',
+        '• This guided step keeps file, reference and group deletion locked so the following examples remain available. Exit the guide to explore exclusions freely.',
         '• All summary statistics and charts recalculate instantly in real-time!'
       ],
       targetSelector: '#guide-curate-btn',
       interactiveAction: 'test_curation',
-      actionPromptText: 'Click "Create Curated View" above and freely toggle exclusions on files, targets, or groups',
+      actionPromptText: 'Click "Create Curated View" to continue',
       actionSuccessText: 'Curation tested! Statistics recalculated. Click Next to continue.',
       nextButtonText: 'Next: Export Reports ▶'
     },
@@ -1505,7 +1514,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   constructor(
     public state: AppStateService,
     private cdr: ChangeDetectorRef,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private excel: ExcelExportService
   ) {}
 
   get currentSteps(): GuideStep[] {
@@ -1538,6 +1548,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   get currentStepTargetSelector(): string | undefined {
     const step = this.currentStep;
+    if (step.id === 'result-curation' && this.state.isCuratedView) return '#guide-exit-curate-btn';
+    if (step.id === 'result-export-report' && this.state.isCuratedView) return '#guide-export-curated-btn';
     if (step.id === 'file-upload' && this.demoFilesLoaded) {
       return '#guide-upload-section';
     }
@@ -1554,26 +1566,28 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'create_guide_tab':
         return this.guideTabCreated;
       case 'load_demo_files':
-        return this.demoFilesLoaded || this.state.selectedFiles.length > 0 || this.state.illuminaPairs.length > 0;
+        return this.demoFilesLoaded;
       case 'open_autofill':
         return this.isAutofillOpen || document.querySelector('#guide-autofill-panel') !== null;
       case 'load_demo_targets':
         return this.demoTargetsLoaded;
       case 'open_window_check':
-        return this.windowCheckOpened || document.querySelector('#guide-window-check-panel') !== null;
+        return this.windowCheckOpened && document.querySelector('#guide-window-check-panel') !== null;
       case 'test_curation':
         return this.curationTested || this.state.isCuratedView;
       case 'click_export':
         return this.exportTested || this.state.lastExportedFile !== null;
       case 'switch_to_viewer':
-        return this.viewerLoaded || (this.state.activeMode === 'viewer' && this.state.genes.length > 0);
+        return this.viewerLoaded;
       default:
         return true;
     }
   }
 
   get isNextButtonEnabled(): boolean {
+    if (this.pendingAction) return false;
     const step = this.currentStep;
+    if (step.targetSelector && !document.querySelector(this.currentStepTargetSelector!)) return false;
     if (step.isIntro || step.isPrereq) return true;
     if (step.interactiveAction) {
       return this.isCurrentActionCompleted;
@@ -1584,23 +1598,83 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.guideMode = this.initialMode;
     if (this.guideMode === 'result') {
+      this.requestTab.emit('viewer');
       this.ensureFigure2SyntheticDataLoaded();
     } else {
       this.state.collapseAnalysisPanels();
     }
-    window.addEventListener('click', this.boundCaptureClick, true);
+    for (const type of this.guardedEvents) window.addEventListener(type, this.boundInteraction, { capture: true, passive: false });
+    (document.activeElement as HTMLElement | null)?.blur();
     this.handleStepSideEffects();
     this.updateLayoutInstant();
   }
 
   ngOnDestroy() {
-    window.removeEventListener('click', this.boundCaptureClick, true);
+    this.destroyed = true;
+    this.clearPendingActions();
+    for (const type of this.guardedEvents) window.removeEventListener(type, this.boundInteraction, true);
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
     }
-    if (this.guideMode === 'analysis') {
-      this.removeGuideTab();
+    this.removeGuideTab();
+    this.restoreViewer();
+  }
+
+  // The spotlight is visual only. Enforce interaction rules at capture phase,
+  // before Angular handlers, including keyboard activation and drag/drop.
+  private allowedSelectors(): string[] {
+    if (this.pendingAction) return [];
+    switch (this.currentStep.id) {
+      case 'analysis-tabs': return this.guideTabCreated ? [] : ['#guide-add-tab-btn'];
+      case 'file-upload': return this.demoFilesLoaded ? [] : ['#guide-upload-zone'];
+      case 'ref-configuration-actions': return ['#guide-autofill-btn'];
+      case 'autofill-panel': return this.demoTargetsLoaded ? [] : ['#guide-autofill-upload-btn'];
+      case 'window-check': return this.windowCheckOpened ? [] : ['#guide-window-check-btn'];
+      case 'result-curation': return this.state.isCuratedView ? [] : ['#guide-curate-btn'];
+      case 'result-export-report': return this.exportTested ? [] : [this.state.isCuratedView ? '#guide-export-curated-btn' : '#guide-export-excel-btn'];
+      case 'result-viewer-reproduce': return this.viewerLoaded ? [] : ['#guide-viewer-tab-btn'];
+      default: return []; // Explanatory steps are read-only, even inside the spotlight.
     }
+  }
+
+  private guardInteraction(event: Event) {
+    if (this.internalAction || this.destroyed) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    if (event.type === 'keydown' && (event as KeyboardEvent).key === 'Escape') {
+      event.preventDefault(); event.stopImmediatePropagation(); this.closeGuide(); return;
+    }
+    if (target.closest('app-tutorial-guide')) return;
+    const permitted = !['contextmenu', 'dblclick', 'dragstart', 'dragover', 'drop'].includes(event.type)
+      && this.allowedSelectors().some(selector => target.closest(selector));
+    if (!permitted) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (event.type === 'focusin') (document.querySelector('.btn-top-exit') as HTMLElement | null)?.focus();
+      return;
+    }
+    if (event.type === 'click') this.onCaptureClick(event as MouseEvent);
+  }
+
+  private later(callback: () => void, delay: number) {
+    const mode = this.guideMode, step = this.currentStepIndex;
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      if (!this.destroyed && this.guideMode === mode && this.currentStepIndex === step) callback();
+    }, delay);
+    this.timers.add(timer);
+  }
+
+  private clearPendingActions() {
+    this.actionRevision++;
+    for (const timer of this.timers) clearTimeout(timer);
+    this.timers.clear();
+    this.pendingAction = false;
+  }
+
+  private clickInternally(selector: string) {
+    this.internalAction = true;
+    try { (document.querySelector(selector) as HTMLElement | null)?.click(); }
+    finally { this.internalAction = false; }
   }
 
   private onCaptureClick(event: MouseEvent) {
@@ -1610,9 +1684,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     // 1. Step: Analysis Tabs - user clicks (+) button
     if (this.currentStep.id === 'analysis-tabs') {
       if (target.closest('#guide-add-tab-btn')) {
-        setTimeout(() => {
-          this.onTabCreatedByClick();
-        }, 80);
+        event.preventDefault(); event.stopImmediatePropagation();
+        this.state.addTab('Guide Analysis');
+        this.onTabCreatedByClick();
       }
     }
 
@@ -1620,7 +1694,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (this.currentStep.id === 'file-upload') {
       if (target.closest('#guide-upload-zone')) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         this.loadDemoFiles();
       }
     }
@@ -1629,8 +1703,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (this.currentStep.id === 'ref-configuration-actions') {
       if (target.closest('#guide-autofill-btn')) {
         this.isAutofillOpen = true;
+        this.pendingAction = true;
         this.cdr.detectChanges();
-        setTimeout(() => {
+        this.later(() => {
+          this.pendingAction = false;
           this.nextStep();
         }, 220);
       }
@@ -1640,7 +1716,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (this.currentStep.id === 'autofill-panel') {
       if (target.closest('#guide-autofill-upload-btn') || target.closest('.btn-template-upload')) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         this.loadDemoTargets();
       }
     }
@@ -1650,7 +1726,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       if (target.closest('#guide-window-check-btn')) {
         this.windowCheckOpened = true;
         this.cdr.detectChanges();
-        setTimeout(() => {
+        this.later(() => {
           this.updateLayoutInstant();
         }, 200);
       }
@@ -1661,7 +1737,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       if (target.closest('#guide-curate-btn') || target.closest('#guide-exit-curate-btn') || target.closest('.exclude-toggle') || target.closest('.exclude-btn-sm') || target.closest('.exclude-btn-group')) {
         this.curationTested = true;
         this.cdr.detectChanges();
-        setTimeout(() => {
+        this.later(() => {
           this.updateLayoutInstant();
         }, 250);
       }
@@ -1670,21 +1746,17 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     // 7. Result Guide Step: Export Excel / Curated
     if (this.currentStep.id === 'result-export-report') {
       if (target.closest('#guide-export-excel-btn') || target.closest('#guide-export-curated-btn')) {
-        this.exportTested = true;
-        this.cdr.detectChanges();
-        setTimeout(() => {
-          this.updateLayoutInstant();
-        }, 300);
+        event.preventDefault(); event.stopImmediatePropagation();
+        void this.exportGuideResult();
       }
     }
 
     // 8. Result Guide Step: Reproduce in Result Viewer tab
     if (this.currentStep.id === 'result-viewer-reproduce') {
-      if (target.closest('#guide-viewer-tab-btn') || target.closest('.nav-tab')) {
+      if (target.closest('#guide-viewer-tab-btn')) {
+        event.preventDefault(); event.stopImmediatePropagation();
         this.requestTab.emit('viewer');
-        setTimeout(() => {
-          this.simulateDropIntoResultViewer();
-        }, 350);
+        void this.simulateDropIntoResultViewer();
       }
     }
   }
@@ -1714,10 +1786,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   private closeWindowCheckPanel() {
-    const winCloseBtn = document.querySelector('.btn-close-window-check') as HTMLElement;
-    if (winCloseBtn) {
-      winCloseBtn.click();
-    }
+    this.clickInternally('.btn-close-window-check');
     this.windowCheckOpened = false;
   }
 
@@ -1728,9 +1797,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      this.closeGuide();
-    } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+    // Enter/Space belong to the focused control, not to global guide navigation.
+    if ((e.target as Element | null)?.closest('button, input, select, textarea, [contenteditable="true"]')) return;
+    if (e.key === 'ArrowRight') {
       if (!this.currentStep.isFinal && this.isNextButtonEnabled) {
         this.nextStep();
       }
@@ -1743,6 +1812,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   prevStep() {
     if (this.currentStepIndex > 0) {
+      this.clearPendingActions();
       this.currentStepIndex--;
       this.handleStepSideEffects();
       this.onStepChanged();
@@ -1759,12 +1829,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.clearPendingActions();
+    if (this.currentStep.id === 'window-check') this.closeWindowCheckPanel();
     this.currentStepIndex++;
     this.handleStepSideEffects();
     this.onStepChanged();
   }
 
   closeGuide() {
+    this.clearPendingActions();
     this.closeWindowCheckPanel();
     this.state.collapseAnalysisPanels();
     this.removeGuideTab();
@@ -1803,6 +1876,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    * Return back to the Guide Selection Hub from any guide.
    */
   returnToHub() {
+    this.clearPendingActions();
     this.closeWindowCheckPanel();
     this.state.collapseAnalysisPanels();
     this.guideMode = 'hub';
@@ -1811,7 +1885,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     this.pathD = '';
     this.cardStyle = {};
     this.cdr.detectChanges();
-    setTimeout(() => {
+    this.later(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       this.updateLayoutInstant();
     }, 120);
@@ -1821,12 +1895,18 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    * Starts the CRISPR Analysis Tour.
    */
   startAnalysisGuide() {
+    this.clearPendingActions();
+    this.removeGuideTab();
+    this.restoreViewer();
+    this.demoFilesLoaded = false;
+    this.demoTargetsLoaded = false;
+    this.isAutofillOpen = false;
     this.guideMode = 'analysis';
     this.currentStepIndex = 0;
     this.requestTab.emit('analysis');
     this.state.collapseAnalysisPanels();
     this.cdr.detectChanges();
-    setTimeout(() => {
+    this.later(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       this.handleStepSideEffects();
       this.updateLayoutInstant();
@@ -1837,12 +1917,14 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    * Switch Tutorial Guide to Results Guide mode and load synthetic Figure 2 dataset if needed.
    */
   startResultsGuide() {
+    this.clearPendingActions();
+    this.closeWindowCheckPanel();
     this.guideMode = 'result';
     this.currentStepIndex = 0;
     this.requestTab.emit('viewer');
     this.ensureFigure2SyntheticDataLoaded();
     this.cdr.detectChanges();
-    setTimeout(() => {
+    this.later(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       this.handleStepSideEffects();
       this.updateLayoutInstant();
@@ -1853,11 +1935,12 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    * Starts the Sequence Workspace Tour.
    */
   startSequenceWorkspaceGuide() {
+    this.clearPendingActions();
     this.guideMode = 'workspace';
     this.currentStepIndex = 0;
     this.requestTab.emit('workspace');
     this.cdr.detectChanges();
-    setTimeout(() => {
+    this.later(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       this.handleStepSideEffects();
       this.updateLayoutInstant();
@@ -1868,11 +1951,12 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    * Starts the Benchmark Tour.
    */
   startBenchmarkGuide() {
+    this.clearPendingActions();
     this.guideMode = 'benchmark';
     this.currentStepIndex = 0;
     this.requestTab.emit('benchmark');
     this.cdr.detectChanges();
-    setTimeout(() => {
+    this.later(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       this.handleStepSideEffects();
       this.updateLayoutInstant();
@@ -1883,42 +1967,74 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    * Loads realistic Figure 2 synthetic data for the single-target CPC locus.
    */
   private ensureFigure2SyntheticDataLoaded() {
-    // If analysisSlot already has loaded genes and results, we don't overwrite
-    if (this.state.analysisSlot.genes && this.state.analysisSlot.genes.length > 0) {
-      this.state.activateSlot('analysis');
-      return;
+    // Always tour a deterministic example in the visible Viewer, never a user's
+    // analysis result. Keep the original Viewer object untouched for restoration.
+    if (!this.savedViewer) {
+      this.savedViewer = this.state.viewerSlot;
+      this.savedCuration = { config: this.state.curationConfig, curated: this.state.isCuratedView,
+        original: this.state.originalSlotSnapshot, exported: this.state.lastExportedFile };
+      this.state.viewerSlot = structuredClone(this.state.viewerSlot);
     }
+    this.curationTested = false; this.exportTested = false; this.viewerLoaded = false;
+    this.state.lastExportedFile = null;
+    this.state.activateSlot('viewer');
+    this.state.loadResultData(this.generateSyntheticFigure2Result());
+  }
 
-    const fig2Data = this.generateSyntheticFigure2Result();
-    this.state.activateSlot('analysis');
-    this.state.loadResultData(fig2Data);
+  private restoreViewer() {
+    if (!this.savedViewer) return;
+    this.state.viewerSlot = this.savedViewer;
+    this.savedViewer = undefined;
+    if (this.savedCuration) {
+      this.state.curationConfig = this.savedCuration.config;
+      this.state.isCuratedView = this.savedCuration.curated;
+      this.state.originalSlotSnapshot = this.savedCuration.original;
+      this.state.lastExportedFile = this.savedCuration.exported;
+      this.savedCuration = undefined;
+    }
+    this.state.resultsUpdated$.next();
+  }
+
+  private async exportGuideResult() {
+    this.pendingAction = true;
+    const revision = this.actionRevision;
+    const originalExport = this.savedCuration?.exported ?? null;
+    const mode = this.guideMode, step = this.currentStepIndex;
+    try {
+      const file = await (this.state.isCuratedView ? this.state.exportCuratedToExcel() : this.state.exportToExcel());
+      if (this.destroyed || this.actionRevision !== revision || this.guideMode !== mode || this.currentStepIndex !== step) {
+        if (this.state.lastExportedFile === file) this.state.lastExportedFile = originalExport;
+        return;
+      }
+      this.exportTested = !!file;
+    } finally {
+      if (!this.destroyed && this.actionRevision === revision && this.guideMode === mode && this.currentStepIndex === step) {
+        this.pendingAction = false; this.cdr.detectChanges(); this.updateLayoutInstant();
+      }
+    }
   }
 
   /**
    * Simulates loading exported Excel into Result Viewer when reaching step R7.
    */
-  private simulateDropIntoResultViewer() {
+  private async simulateDropIntoResultViewer() {
     const file = this.state.lastExportedFile;
-    if (file) {
-      window.dispatchEvent(new CustomEvent('casmango:guide-load-excel', { detail: { file } }));
-      this.viewerLoaded = true;
-      this.cdr.detectChanges();
-      setTimeout(() => {
-        this.updateLayoutInstant();
-      }, 250);
-    } else {
-      // If user skipped direct export button, generate and load Figure 2 data directly into viewer slot
-      const fig2Data = this.generateSyntheticFigure2Result();
+    if (!file) return;
+    this.pendingAction = true;
+    const revision = this.actionRevision;
+    const step = this.currentStepIndex;
+    try {
+      const data = await this.excel.importFromExcel(file);
+      if (this.destroyed || this.actionRevision !== revision || this.guideMode !== 'result' || this.currentStepIndex !== step) return;
       this.state.activateSlot('viewer');
-      this.state.loadResultData({
-        ...fig2Data,
-        curationConfig: this.state.isCuratedView ? this.state.curationConfig : null
-      });
+      this.state.loadResultData(data);
       this.viewerLoaded = true;
-      this.cdr.detectChanges();
-      setTimeout(() => {
-        this.updateLayoutInstant();
-      }, 250);
+    } catch {
+      if (this.actionRevision === revision) this.viewerLoaded = false;
+    } finally {
+      if (!this.destroyed && this.actionRevision === revision && this.guideMode === 'result' && this.currentStepIndex === step) {
+        this.pendingAction = false; this.cdr.detectChanges(); this.updateLayoutInstant();
+      }
     }
   }
 
@@ -2108,7 +2224,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       const autofillPanel = document.querySelector('#guide-autofill-panel');
       if (!autofillPanel) {
         const autofillBtn = document.querySelector('#guide-autofill-btn') as HTMLElement;
-        if (autofillBtn) autofillBtn.click();
+        if (autofillBtn) this.clickInternally('#guide-autofill-btn');
       }
       this.isAutofillOpen = true;
     }
@@ -2118,7 +2234,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       const advPanel = document.querySelector('#guide-advanced-panel');
       if (!advPanel) {
         const advBtn = document.querySelector('#guide-advanced-btn') as HTMLElement;
-        if (advBtn) advBtn.click();
+        if (advBtn) this.clickInternally('#guide-advanced-btn');
       }
     }
   }
@@ -2146,7 +2262,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     }
     this.demoFilesLoaded = true;
     this.cdr.detectChanges();
-    setTimeout(() => {
+    this.later(() => {
       this.updateLayoutInstant();
     }, 120);
   }
@@ -2188,7 +2304,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
     this.demoTargetsLoaded = true;
     this.cdr.detectChanges();
-    setTimeout(() => {
+    this.later(() => {
       this.updateLayoutInstant();
     }, 120);
   }
@@ -2224,7 +2340,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     this.updateLayoutInstant();
 
     // Re-verify once after smooth scroll settles
-    setTimeout(() => {
+    this.later(() => {
       this.updateLayoutInstant();
     }, 320);
   }

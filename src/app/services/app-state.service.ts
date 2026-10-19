@@ -1114,10 +1114,10 @@ export class AppStateService {
         data: {
           labels: barLabels,
           datasets: [
-            { label: 'No Indel %', data: barDataNoIndel, backgroundColor: '#2ecc71' },
-            { label: 'Substitution %', data: barDataSub, backgroundColor: '#3498db' },
-            { label: 'In-frame %', data: barDataIn, backgroundColor: '#e67e22' },
-            { label: 'Out-of-frame %', data: barDataOut, backgroundColor: '#e74c3c' },
+            { label: 'No Indel %', data: barDataNoIndel, backgroundColor: '#009E73' },
+            { label: 'Substitution %', data: barDataSub, backgroundColor: '#CC79A7' },
+            { label: 'In-frame %', data: barDataIn, backgroundColor: '#0072B2' },
+            { label: 'Out-of-frame %', data: barDataOut, backgroundColor: '#E69F00' },
           ]
         },
         options: { animation: false, responsive: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } } }
@@ -1139,7 +1139,7 @@ export class AppStateService {
               labels: ['Unmodified', 'Substitution', 'In-frame', 'Out-of-frame'],
               datasets: [{
                 data: [s.no_indel_pct, s.substitution_pct, s.in_frame_pct, s.out_of_frame_pct],
-                backgroundColor: ['#2ecc71', '#3498db', '#e67e22', '#e74c3c']
+                backgroundColor: ['#009E73', '#CC79A7', '#0072B2', '#E69F00']
               }]
             },
             options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Mutation Distribution (${gene.gene} - ${target.target_id})` } } }
@@ -1159,7 +1159,7 @@ export class AppStateService {
               labels: ['Indel edited', 'No indel', 'Substitution'],
               datasets: [{
                 data: [edited, unedited, substitution],
-                backgroundColor: ['#f85a7e', '#d1d1d1', '#3498db']
+                backgroundColor: ['#E69F00', '#009E73', '#CC79A7']
               }]
             },
             options: { animation: false, responsive: false, plugins: { title: { display: true, text: `Indel Editing (${gene.gene} - ${target.target_id})` } } }

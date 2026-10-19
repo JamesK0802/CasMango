@@ -1526,10 +1526,10 @@ input[type="range"].form-range,
   box-shadow: var(--shadow-md);
 }
 
-.metric-card.out-of-frame { border-top-color: var(--color-error); }
-.metric-card.in-frame     { border-top-color: var(--color-warning); }
-.metric-card.no-indel     { border-top-color: var(--color-primary); }
-.metric-card.sub          { border-top-color: var(--color-secondary); }
+.metric-card.out-of-frame { border-top-color: #E69F00; }
+.metric-card.in-frame     { border-top-color: #0072B2; }
+.metric-card.no-indel     { border-top-color: #009E73; }
+.metric-card.sub          { border-top-color: #CC79A7; }
 
 .m-label {
   display: block;
@@ -2013,10 +2013,10 @@ tr.row-selected td { background: var(--color-primary-light); border-bottom-color
 }
 
 /* Metric-card accent tweaks (minor) */
-.metric-card.out-of-frame { border-left: 4px solid #e74c3c; }
-.metric-card.in-frame     { border-left: 4px solid #e67e22; }
-.metric-card.no-indel     { border-left: 4px solid #2ecc71; }
-.metric-card.sub          { border-left: 4px solid #3498db; }
+.metric-card.out-of-frame { border-left: 4px solid #E69F00; }
+.metric-card.in-frame     { border-left: 4px solid #0072B2; }
+.metric-card.no-indel     { border-left: 4px solid #009E73; }
+.metric-card.sub          { border-left: 4px solid #CC79A7; }
 
 /* ── Table row selection ── */
 .row-selected {

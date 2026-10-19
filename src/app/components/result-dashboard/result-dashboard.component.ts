@@ -386,7 +386,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
       const biasDominant = rates[0].rate > rates[1].rate ? rates[0].name : (rates[1].rate > rates[0].rate ? rates[1].name : 'Equal');
 
       const pairBreakdown = [
-        { label: `Both Edited (${rates[0].name}+ / ${rates[1].name}+)`, pct: pBoth, color: '#f59e0b' },
+        { label: `Both Edited (${rates[0].name}+ / ${rates[1].name}+)`, pct: pBoth, color: '#0072B2' },
         { label: `Only ${rates[0].name} (${rates[0].name}+ / ${rates[1].name}⁻)`, pct: pOnlyA, color: '#65a30d' },
         { label: `Only ${rates[1].name} (${rates[0].name}⁻ / ${rates[1].name}+)`, pct: pOnlyB, color: '#0ea5e9' },
         { label: `Wild-Type (${rates[0].name}⁻ / ${rates[1].name}⁻)`, pct: pNone, color: '#cbd5e1' }
@@ -410,7 +410,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     const dominantGene = rates.find(r => r.rate === maxR)?.name || 'Equal';
 
     const pairBreakdown = [
-      { label: `All Homoeologs Edited`, pct: pBoth, color: '#f59e0b' },
+      { label: `All Homoeologs Edited`, pct: pBoth, color: '#0072B2' },
       { label: `Partial Homoeologs Edited`, pct: pSingle, color: '#65a30d' },
       { label: `Wild-Type (All Unedited)`, pct: pNone, color: '#cbd5e1' }
     ];
@@ -647,10 +647,10 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
         data: {
           labels: flat.map(item => this.state.isMultiReference ? item.target.target_id : `${item.file.sample_name || item.file.fastq_file.split('/').pop()} (${item.target.target_id})`),
           datasets: [
-            { label: 'No Indel %', data: flat.map(item => item.target.summary?.no_indel_pct ?? 0), backgroundColor: '#2ecc71' },
-            { label: 'Substitution %', data: flat.map(item => item.target.summary?.substitution_pct ?? 0), backgroundColor: '#3498db' },
-            { label: 'In-frame %', data: flat.map(item => item.target.summary?.in_frame_pct ?? 0), backgroundColor: '#e67e22' },
-            { label: 'Out-of-frame %', data: flat.map(item => item.target.summary?.out_of_frame_pct ?? 0), backgroundColor: '#e74c3c' }
+            { label: 'No Indel %', data: flat.map(item => item.target.summary?.no_indel_pct ?? 0), backgroundColor: '#009E73' },
+            { label: 'Substitution %', data: flat.map(item => item.target.summary?.substitution_pct ?? 0), backgroundColor: '#CC79A7' },
+            { label: 'In-frame %', data: flat.map(item => item.target.summary?.in_frame_pct ?? 0), backgroundColor: '#0072B2' },
+            { label: 'Out-of-frame %', data: flat.map(item => item.target.summary?.out_of_frame_pct ?? 0), backgroundColor: '#E69F00' }
           ]
         },
         options: {
@@ -670,7 +670,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
           labels: ['No Indel', 'Substitution', 'In-frame Indel', 'Out-of-frame Indel'],
           datasets: [{
             data: [selectedData.breakdown.no_indel ?? 0, selectedData.breakdown.substitution ?? 0, selectedData.breakdown.in_frame ?? 0, selectedData.breakdown.out_of_frame ?? 0],
-            backgroundColor: ['#2ecc71', '#3498db', '#e67e22', '#e74c3c']
+            backgroundColor: ['#009E73', '#CC79A7', '#0072B2', '#E69F00']
           }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: `Mutation Distribution (${selectedData.target_id})` } } }
@@ -685,7 +685,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
           labels: ['Indel edited', 'No indel', 'Substitution'],
           datasets: [{
             data: [selectedData.summary.modified ?? 0, selectedData.summary.unmodified ?? 0, selectedData.breakdown?.substitution ?? selectedData.summary.substitution_reads ?? 0],
-            backgroundColor: ['#ff6384', '#cccccc', '#3498db']
+            backgroundColor: ['#E69F00', '#009E73', '#CC79A7']
           }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: `Indel Editing (${selectedData.target_id})` } } }
@@ -706,9 +706,9 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
       const metricLabel = this.homoeologMutationFilter === 'oof' ? 'Out-of-Frame %' :
                            this.homoeologMutationFilter === 'inframe' ? 'In-Frame %' :
                            this.homoeologMutationFilter === 'sub' ? 'Substitution %' : 'Editing Efficiency %';
-      const metricColor = this.homoeologMutationFilter === 'oof' ? '#ef4444' :
-                          this.homoeologMutationFilter === 'inframe' ? '#f59e0b' :
-                          this.homoeologMutationFilter === 'sub' ? '#3b82f6' : '#f59e0b';
+      const metricColor = this.homoeologMutationFilter === 'oof' ? '#E69F00' :
+                          this.homoeologMutationFilter === 'inframe' ? '#0072B2' :
+                          this.homoeologMutationFilter === 'sub' ? '#CC79A7' : '#0072B2';
 
       this.state.addChart(new Chart(editingCanvas, {
         type: 'bar',
@@ -742,10 +742,10 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
             { label: 'Unmodified', data: genes.map(gene => {
               const summary = this.homoeologTarget(gene, targetId)?.summary;
               return Math.max(0, Number(summary?.no_indel_pct ?? 0) - Number(summary?.substitution_pct ?? 0));
-            }), backgroundColor: '#10b981' },
-            { label: 'Substitution', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.substitution_pct ?? 0)), backgroundColor: '#3b82f6' },
-            { label: 'In-frame', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.in_frame_pct ?? 0)), backgroundColor: '#f59e0b' },
-            { label: 'Out-of-frame', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.out_of_frame_pct ?? 0)), backgroundColor: '#ef4444' }
+            }), backgroundColor: '#009E73' },
+            { label: 'Substitution', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.substitution_pct ?? 0)), backgroundColor: '#CC79A7' },
+            { label: 'In-frame', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.in_frame_pct ?? 0)), backgroundColor: '#0072B2' },
+            { label: 'Out-of-frame', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.out_of_frame_pct ?? 0)), backgroundColor: '#E69F00' }
           ]
         },
         options: {
