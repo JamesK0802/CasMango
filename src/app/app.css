@@ -1526,6 +1526,25 @@ input[type="range"].form-range,
   box-shadow: var(--shadow-md);
 }
 
+/* During a guided tour, keep its target controls visible on small screens.
+   Normal mobile navigation and collapsed result sections are unchanged. */
+@media (max-width: 768px) {
+  .casmango-guide-active .desktop-nav-links { display: flex !important; }
+  .casmango-guide-active .desktop-nav-links .nav-tab:not(#guide-viewer-tab-btn),
+  .casmango-guide-active .mobile-active-section,
+  .casmango-guide-active .mobile-results-actions,
+  .casmango-guide-active .mobile-gene-info-toggle,
+  .casmango-guide-active .mobile-chart-toggle { display: none !important; }
+  .casmango-guide-active .results-dashboard .export-bar {
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .casmango-guide-active .results-dashboard .gene-info-stripe,
+  .casmango-guide-active .results-dashboard .charts-section { display: grid !important; }
+  .casmango-guide-active .target-all-actions-bar { flex-wrap: wrap; margin-left: 0 !important; }
+}
+
 .metric-card.out-of-frame { border-top-color: #E69F00; }
 .metric-card.in-frame     { border-top-color: #0072B2; }
 .metric-card.no-indel     { border-top-color: #009E73; }

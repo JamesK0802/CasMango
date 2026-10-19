@@ -4,6 +4,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { FormArray } from '@angular/forms';
 import { AppStateService } from '../../services/app-state.service';
 import { ExcelExportService } from '../../services/excel-export.service';
+import { addTryExample } from './guide-demo';
 
 export interface AdvantageCard {
   title: string;
@@ -28,7 +29,7 @@ export interface GuideStep {
   isPrereq?: boolean;
   isFinal?: boolean;
   nextButtonText?: string;
-  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'click_export' | 'switch_to_viewer';
+  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer';
   actionPromptText?: string;
   actionSuccessText?: string;
 }
@@ -124,13 +125,13 @@ export interface GuideStep {
           </div>
 
           <!-- 1-line tool explanation -->
-          <p class="bubble-intro-line" *ngIf="currentStep.introLine">
+          <p class="bubble-intro-line" *ngIf="currentStep.introLine && guideMode !== 'hub'">
             {{ currentStep.introLine }}
           </p>
 
           <!-- Interactive 4-Card Selection Grid for Guide Hub -->
           <div class="hub-cards-grid" *ngIf="guideMode === 'hub'">
-            <div class="hub-card"
+            <button type="button" class="hub-card"
                  *ngFor="let card of currentStep.cards; let i = index"
                  (click)="selectGuideFromHub(card.title)">
               <div class="hub-card-header">
@@ -138,9 +139,7 @@ export interface GuideStep {
                 <span class="hub-card-arrow">▶</span>
               </div>
               <h3 class="hub-card-title">{{ card.title }}</h3>
-              <p class="hub-card-desc">{{ card.desc }}</p>
-              <button type="button" class="btn-hub-start">Start Guide</button>
-            </div>
+            </button>
           </div>
 
           <!-- 3 Advantage Cards (Intro & Prereq) -->
@@ -293,7 +292,7 @@ export interface GuideStep {
       position: fixed;
       top: 18px;
       left: 24px;
-      z-index: 100010;
+      z-index: 99999;
       pointer-events: auto;
       background: rgba(15, 23, 42, 0.85);
       border: 1px solid rgba(255, 255, 255, 0.25);
@@ -325,7 +324,7 @@ export interface GuideStep {
       position: fixed;
       top: 18px;
       right: 24px;
-      z-index: 100010;
+      z-index: 99999;
       pointer-events: auto;
       background: rgba(15, 23, 42, 0.85);
       border: 1px solid rgba(255, 255, 255, 0.25);
@@ -416,6 +415,8 @@ export interface GuideStep {
       margin: auto;
       max-width: 820px;
       width: 90%;
+      max-height: calc(100dvh - 100px);
+      overflow-y: auto;
     }
 
     .guide-dialog-wrapper.is-large-dialog {
@@ -567,6 +568,8 @@ export interface GuideStep {
     }
 
     .hub-card {
+      text-align: left;
+      min-height: 140px;
       background: #f8fafc;
       border: 2px solid #e2e8f0;
       border-radius: 14px;
@@ -617,7 +620,7 @@ export interface GuideStep {
 
     .hub-card-title {
       margin: 0 0 6px 0;
-      font-size: 15.5px;
+      font-size: 24px;
       font-weight: 800;
       color: #0f172a;
       line-height: 1.35;
@@ -935,10 +938,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private internalAction = false;
   private pendingAction = false;
   private actionRevision = 0;
+  private targetObserver?: ResizeObserver;
+  private observedTarget?: Element;
+  private excludedExample = false;
+  private restoredExample = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private savedViewer?: AppStateService['viewerSlot'];
   private savedCuration?: { config: AppStateService['curationConfig']; curated: boolean; original: AppStateService['originalSlotSnapshot']; exported: File | null };
-  private readonly guardedEvents = ['pointerdown', 'mousedown', 'touchstart', 'click', 'dblclick', 'contextmenu', 'dragstart', 'dragover', 'drop', 'keydown', 'focusin'];
+  // Block activation, not native touch scrolling through a long highlighted panel.
+  private readonly guardedEvents = ['pointerdown', 'mousedown', 'click', 'dblclick', 'contextmenu', 'dragstart', 'dragover', 'drop', 'keydown', 'focusin'];
   private boundInteraction = (event: Event) => this.guardInteraction(event);
 
   steps: GuideStep[] = [
@@ -1160,7 +1168,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     {
       id: 'hub',
       stageName: 'Guide Selection Hub',
-      headline: 'Welcome to CasMANGO Guides',
+      headline: 'Choose a guide',
       introLine: 'Select a guide below to explore the end-to-end interactive tutorial for that module:',
       cards: [
         {
@@ -1328,12 +1336,12 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       id: 'result-welcome',
       stageName: 'Results Dashboard',
       headline: 'Results & Outcome Analysis',
-      introLine: 'Welcome to the Results Guide! We load the Figure 2 synthetic benchmark dataset (single-target CPC Cas9 amplicon) to walk through the read-filtering flow, metric cards, 3 visual charts, mutation annotation tracks, and live curation tools.',
+      introLine: 'Explore synthetic CPC and TRY results, then try excluding and restoring a mutation group. Your own results stay untouched.',
       cards: [
         {
           badge: 'Synthetic Ground Truth',
-          title: 'Figure 2 CPC Amplicon',
-          desc: 'High-coverage synthetic locus modeled after Figure 2 CPC amplicon with defined cleavage sites and mutation spectrum.'
+          title: 'CPC & TRY Example',
+          desc: 'Illustrative synthetic results for two references with different editing profiles.'
         },
         {
           badge: 'Filter Transparency',
@@ -1348,6 +1356,14 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       ],
       nextButtonText: 'Next: Read Filtering Flow ▶',
       isIntro: true
+    },
+
+    {
+      id: 'result-references', stageName: 'Reference Results', headline: 'Switch from CPC to TRY',
+      textLines: ['Select TRY to view its own read counts, editing charts and mutation groups. Each reference has a separate profile.'],
+      targetSelector: '.gene-tabs-wrapper', interactiveAction: 'switch_reference',
+      actionPromptText: 'Click the TRY reference tab', actionSuccessText: 'TRY selected. Continue to its read-filtering flow.',
+      nextButtonText: 'Next: Read Filtering Flow ▶'
     },
 
     // ── R1. Read Flow & Margin Filter ──
@@ -1435,8 +1451,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Target Actions',
       headline: 'Read FASTQ Export & Sequence Viewer',
       textLines: [
-        '• Download FASTQ: Export all original sequencing reads or specific mutation group reads as standard FASTQ files.',
-        '• All Reads in Workspace: Click to instantly open all reads in the Sequence Viewer (Sequence Workspace) with automatic reference alignment pre-configured.'
+        '• Download FASTQ exports all target reads or one mutation group. Sequence Viewer opens them for inspection.',
+        '• These buttons are shown as disabled previews in this synthetic example. They are available after an actual analysis while the original FASTQ files remain loaded.'
       ],
       targetSelector: '#guide-annotation-panel',
       nextButtonText: 'Next: Test Curation View ▶'
@@ -1448,14 +1464,26 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Data Curation',
       headline: 'Interactive Curation View',
       textLines: [
-        '• Click Create Curated View below to try a separate, editable result view.',
-        '• This guided step keeps file, reference and group deletion locked so the following examples remain available. Exit the guide to explore exclusions freely.',
-        '• All summary statistics and charts recalculate instantly in real-time!'
+        'Create a separate curated view. Next, you will exclude one example group and restore it while watching the counts and charts update.'
       ],
       targetSelector: '#guide-curate-btn',
       interactiveAction: 'test_curation',
       actionPromptText: 'Click "Create Curated View" to continue',
-      actionSuccessText: 'Curation tested! Statistics recalculated. Click Next to continue.',
+      actionSuccessText: 'Curated view ready. Next, try excluding a group.',
+      nextButtonText: 'Next: Exclude a Group ▶'
+    },
+    {
+      id: 'result-exclude-group', stageName: 'Try Curation', headline: 'Exclude the last mutation group',
+      textLines: ['Click × beside the last group in the highlighted annotation panel. Its reads are excluded and the summary statistics update. Other groups stay locked during this step.'],
+      targetSelector: '#guide-annotation-panel', interactiveAction: 'exclude_group',
+      actionPromptText: 'Click × beside Group 5', actionSuccessText: 'Group excluded. Notice its crossed-out row and the updated counts.',
+      nextButtonText: 'Next: Restore the Group ▶'
+    },
+    {
+      id: 'result-restore-group', stageName: 'Restore Curation', headline: 'Restore the excluded group',
+      textLines: ['Click ↩ beside the excluded group. Its reads and the original editing profile return. Curating changes only this view, not the underlying analysis.'],
+      targetSelector: '#guide-annotation-panel', interactiveAction: 'restore_group',
+      actionPromptText: 'Click ↩ beside the excluded group', actionSuccessText: 'Group restored. The original counts are back.',
       nextButtonText: 'Next: Export Reports ▶'
     },
 
@@ -1548,7 +1576,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   get currentStepTargetSelector(): string | undefined {
     const step = this.currentStep;
-    if (step.id === 'result-curation' && this.state.isCuratedView) return '#guide-exit-curate-btn';
+    if (step.id === 'result-curation' && this.state.isCuratedView) return '#guide-annotation-panel';
     if (step.id === 'result-export-report' && this.state.isCuratedView) return '#guide-export-curated-btn';
     if (step.id === 'file-upload' && this.demoFilesLoaded) {
       return '#guide-upload-section';
@@ -1574,7 +1602,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'open_window_check':
         return this.windowCheckOpened && document.querySelector('#guide-window-check-panel') !== null;
       case 'test_curation':
-        return this.curationTested || this.state.isCuratedView;
+        return this.state.isCuratedView;
+      case 'switch_reference': return this.state.currentGene?.gene === 'TRY';
+      case 'exclude_group': return this.excludedExample;
+      case 'restore_group': return this.restoredExample;
       case 'click_export':
         return this.exportTested || this.state.lastExportedFile !== null;
       case 'switch_to_viewer':
@@ -1596,6 +1627,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    document.body?.classList.add('casmango-guide-active');
     this.guideMode = this.initialMode;
     if (this.guideMode === 'result') {
       this.requestTab.emit('viewer');
@@ -1610,8 +1642,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    document.body?.classList.remove('casmango-guide-active');
     this.destroyed = true;
     this.clearPendingActions();
+    this.targetObserver?.disconnect();
     for (const type of this.guardedEvents) window.removeEventListener(type, this.boundInteraction, true);
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
@@ -1630,7 +1664,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'ref-configuration-actions': return ['#guide-autofill-btn'];
       case 'autofill-panel': return this.demoTargetsLoaded ? [] : ['#guide-autofill-upload-btn'];
       case 'window-check': return this.windowCheckOpened ? [] : ['#guide-window-check-btn'];
+      case 'result-references': return ['.gene-tab-btn[data-curation-key="TRY"]'];
       case 'result-curation': return this.state.isCuratedView ? [] : ['#guide-curate-btn'];
+      case 'result-exclude-group': return this.excludedExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
+      case 'result-restore-group': return this.restoredExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-export-report': return this.exportTested ? [] : [this.state.isCuratedView ? '#guide-export-curated-btn' : '#guide-export-excel-btn'];
       case 'result-viewer-reproduce': return this.viewerLoaded ? [] : ['#guide-viewer-tab-btn'];
       default: return []; // Explanatory steps are read-only, even inside the spotlight.
@@ -1641,10 +1678,18 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (this.internalAction || this.destroyed) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
+    // Excel export creates its own temporary download link outside the tour.
+    if (event.type === 'click' && !event.isTrusted && target.tagName === 'A'
+        && (target as HTMLAnchorElement).download && (target as HTMLAnchorElement).href.startsWith('blob:')) return;
     if (event.type === 'keydown' && (event as KeyboardEvent).key === 'Escape') {
       event.preventDefault(); event.stopImmediatePropagation(); this.closeGuide(); return;
     }
     if (target.closest('app-tutorial-guide')) return;
+    if (['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)
+        && ['pointerdown', 'mousedown', 'touchstart'].includes(event.type)) {
+      // A tutorial click must not start the normal drag-to-delete sweep.
+      event.preventDefault(); event.stopImmediatePropagation(); return;
+    }
     const permitted = !['contextmenu', 'dblclick', 'dragstart', 'dragover', 'drop'].includes(event.type)
       && this.allowedSelectors().some(selector => target.closest(selector));
     if (!permitted) {
@@ -1652,7 +1697,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       if (event.type === 'focusin') (document.querySelector('.btn-top-exit') as HTMLElement | null)?.focus();
       return;
     }
-    if (event.type === 'click') this.onCaptureClick(event as MouseEvent);
+    const groupKey = ['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)
+      && event.type === 'keydown' && ['Enter', ' '].includes((event as KeyboardEvent).key);
+    if (event.type === 'click' || groupKey) this.onCaptureClick(event as MouseEvent);
   }
 
   private later(callback: () => void, delay: number) {
@@ -1680,6 +1727,21 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private onCaptureClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
     if (!target) return;
+
+    if (['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      const gene = this.state.currentGene?.gene;
+      const targetResult = this.state.selectedTarget;
+      const group = targetResult?.top_groups?.find((g: any) => g.group_rank === 5);
+      if (gene && group) {
+        this.state.toggleGroupExclusion(gene, targetResult.target_id, group.read_inner);
+        const excluded = this.state.isGroupExcluded(gene, targetResult.target_id, group.read_inner);
+        if (this.currentStep.id === 'result-exclude-group') this.excludedExample = excluded;
+        else this.restoredExample = !excluded;
+        this.cdr.detectChanges(); this.updateLayoutInstant();
+      }
+      return;
+    }
 
     // 1. Step: Analysis Tabs - user clicks (+) button
     if (this.currentStep.id === 'analysis-tabs') {
@@ -1976,12 +2038,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.state.viewerSlot = structuredClone(this.state.viewerSlot);
     }
     this.curationTested = false; this.exportTested = false; this.viewerLoaded = false;
+    this.excludedExample = false; this.restoredExample = false;
     this.state.lastExportedFile = null;
+    this.state.guideReadActionsPreview = true;
     this.state.activateSlot('viewer');
     this.state.loadResultData(this.generateSyntheticFigure2Result());
   }
 
   private restoreViewer() {
+    this.state.guideReadActionsPreview = false;
     if (!this.savedViewer) return;
     this.state.viewerSlot = this.savedViewer;
     this.savedViewer = undefined;
@@ -2028,6 +2093,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       if (this.destroyed || this.actionRevision !== revision || this.guideMode !== 'result' || this.currentStepIndex !== step) return;
       this.state.activateSlot('viewer');
       this.state.loadResultData(data);
+      this.state.guideReadActionsPreview = false;
       this.viewerLoaded = true;
     } catch {
       if (this.actionRevision === revision) this.viewerLoaded = false;
@@ -2210,7 +2276,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       sequencingPlatform: 'nanopore'
     };
 
-    return { params, scopes };
+    return addTryExample({ params, scopes });
   }
 
   /**
@@ -2352,6 +2418,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private updateLayoutInstant() {
     const sel = this.currentStepTargetSelector;
     if (!sel) {
+      this.targetObserver?.disconnect();
+      this.observedTarget = undefined;
       this.targetRect = null;
       this.pathD = '';
       this.cardStyle = {};
@@ -2366,6 +2434,21 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.cardStyle = {};
       this.cdr.detectChanges();
       return;
+    }
+
+    // Window Check grows after its worker finishes; curation and reference
+    // switches also change panel height. Measure the final DOM, not a timeout snapshot.
+    if (typeof ResizeObserver !== 'undefined' && this.observedTarget !== el) {
+      this.targetObserver?.disconnect();
+      this.observedTarget = el;
+      this.targetObserver = new ResizeObserver(() => {
+        if (this.destroyed || this.rafId !== null) return;
+        this.rafId = requestAnimationFrame(() => {
+          this.rafId = null;
+          if (!this.destroyed) this.updateLayoutInstant();
+        });
+      });
+      this.targetObserver.observe(el, { box: 'border-box' });
     }
 
     const clientRect = el.getBoundingClientRect();
@@ -2389,7 +2472,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     const dialogHeight = dialogEl ? dialogEl.offsetHeight : 280;
     const docWidth = document.documentElement.clientWidth || window.innerWidth;
     const vh = window.innerHeight;
-    const cardWidth = Math.min(800, Math.max(340, docWidth - 48));
+    const cardWidth = Math.min(800, Math.max(0, docWidth - 32));
     const gap = 24;
 
     let cTop = 0;
@@ -2405,7 +2488,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     const spaceAbove = clientRect.top;
     const preferAbove = (clientRect.bottom > vh * 0.55 || clientRect.height > 220);
 
-    if (preferAbove && spaceAbove >= dialogHeight + gap) {
+    // Anchor large-panel explanations above the panel in document coordinates.
+    // Otherwise scrolling to a group can flip the bubble below it mid-click.
+    if (preferAbove && rect.top >= dialogHeight + gap + 72) {
       cTop = rect.top - dialogHeight - gap;
       sY = rect.top - 6;
       eY = cTop + dialogHeight;
@@ -2430,7 +2515,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     }
 
     // Clamp horizontally to page bounds
-    cLeft = Math.max(24, Math.min(docWidth - cardWidth - 24, cLeft));
+    cLeft = Math.max(16, Math.min(docWidth - cardWidth - 16, cLeft));
     eX = Math.max(cLeft + 60, Math.min(cLeft + cardWidth - 60, sX));
 
     this.cardStyle = {

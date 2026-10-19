@@ -95,6 +95,8 @@ export class AppStateService {
   analysisSlot: ResultSlot = emptySlot();
   viewerSlot: ResultSlot = emptySlot();
   activeMode: 'analysis' | 'viewer' = 'analysis';
+  /** Only the tutorial shows disabled read-action previews without source FASTQs. */
+  guideReadActionsPreview = false;
 
   // ── Curation state ──
   isCuratedView = false;

@@ -84,6 +84,21 @@ describe('guided interaction boundaries', () => {
     expect(guide.closeGuide).toHaveBeenCalledTimes(1);
   });
 
+  it('allows only generated blob download links outside the highlighted action', () => {
+    const { guide } = setup(); step(guide, 'result-export-report', 'result');
+    const download = event([]);
+    Object.assign(download.target, { tagName: 'A', download: 'results.xlsx', href: 'blob:https://example.test/report' });
+    (guide as any).guardInteraction(download); expect(download.preventDefault).not.toHaveBeenCalled();
+    download.target.href = 'https://example.test/unrelated';
+    (guide as any).guardInteraction(download); expect(download.preventDefault).toHaveBeenCalled();
+  });
+
+  it('keeps native touch scrolling available through long highlighted panels', () => {
+    const { guide } = setup();
+    expect((guide as any).guardedEvents).not.toContain('touchstart');
+    expect((guide as any).guardedEvents).toContain('click');
+  });
+
   it('does not turn Enter on a focused guide button into another Next action', () => {
     const { guide } = setup(); guide.nextStep = vi.fn();
     guide.onKeyDown(event(['button'], 'keydown', 'Enter'));
@@ -100,6 +115,34 @@ describe('guided interaction boundaries', () => {
   it('does not enable Next while the required screen target is missing', () => {
     const { guide } = setup(); step(guide, 'result-metrics', 'result');
     expect(guide.isNextButtonEnabled).toBe(false);
+  });
+
+  it('requires TRY selection before continuing the reference-switch step', () => {
+    const { guide, state } = setup(); step(guide, 'result-references', 'result');
+    state.currentGene = { gene: 'CPC' }; expect(guide.isCurrentActionCompleted).toBe(false);
+    state.currentGene = { gene: 'TRY' }; expect(guide.isCurrentActionCompleted).toBe(true);
+  });
+
+  it('allows one example-group exclusion and then requires restoring it', () => {
+    const { guide, state } = setup(); step(guide, 'result-exclude-group', 'result');
+    let excluded = false;
+    state.currentGene = { gene: 'TRY' }; state.selectedTarget = { target_id: 't1', top_groups: [{ group_rank: 5, read_inner: 'ACTG' }] };
+    state.isGroupExcluded = () => excluded;
+    state.toggleGroupExclusion = vi.fn(() => excluded = !excluded);
+    const selector = '#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group';
+    (guide as any).guardInteraction(event([selector]));
+    expect(guide.isCurrentActionCompleted).toBe(true); expect(excluded).toBe(true);
+    (guide as any).guardInteraction(event([selector]));
+    expect(state.toggleGroupExclusion).toHaveBeenCalledTimes(1);
+    step(guide, 'result-restore-group', 'result'); expect(guide.isCurrentActionCompleted).toBe(false);
+    (guide as any).guardInteraction(event([selector], 'keydown', 'Enter'));
+    expect(excluded).toBe(false); expect(guide.isCurrentActionCompleted).toBe(true);
+  });
+
+  it('blocks drag-delete initiation during the group exercise', () => {
+    const { guide } = setup(); step(guide, 'result-exclude-group', 'result');
+    const e = event(['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'], 'pointerdown');
+    (guide as any).guardInteraction(e); expect(e.stopImmediatePropagation).toHaveBeenCalled();
   });
 
   it('does not accept existing user files as completion of the demo upload', () => {
@@ -139,6 +182,25 @@ describe('Results guide entry and readiness', () => {
     const { guide, state } = setup(); guide.viewerLoaded = true; guide.exportTested = true; state.lastExportedFile = {};
     guide.startResultsGuide();
     expect(guide.viewerLoaded).toBe(false); expect(guide.exportTested).toBe(false); expect(state.lastExportedFile).toBeNull();
+  });
+
+  it('uses CPC and TRY examples with separate sequences and reconciled read counts', () => {
+    const { guide } = setup(); const data = (guide as any).generateSyntheticFigure2Result();
+    expect(data.scopes[0].genes.map((g: any) => g.gene)).toEqual(['CPC', 'TRY']);
+    const targets = data.scopes[0].genes.map((g: any) => g.analysis_result.targets[0]);
+    expect(targets[0].ref_sequence).not.toBe(targets[1].ref_sequence);
+    for (const t of targets) {
+      expect(t.top_groups.reduce((sum: number, g: any) => sum + g.read_count, 0)).toBe(t.summary.aligned_reads);
+      expect(t.ref_sequence.length).toBe(90);
+      expect(t.top_groups.every((g: any) => /^[ACGT]+$/.test(g.read_inner))).toBe(true);
+    }
+    expect(data.scopes[0].readFlow.assignedReads).toBe(targets.reduce((sum: number, t: any) => sum + t.summary.aligned_reads, 0));
+  });
+
+  it('shows read-action previews only during the demo and clears them on restoration', () => {
+    const { guide, state } = setup(); guide.startResultsGuide();
+    expect(state.guideReadActionsPreview).toBe(true);
+    (guide as any).restoreViewer(); expect(state.guideReadActionsPreview).toBe(false);
   });
 
   it('waits for the actual Excel import before completing the reproduction step', async () => {
