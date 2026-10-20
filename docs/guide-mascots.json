@@ -1,0 +1,17 @@
+{
+  "generator": "Built-in image_gen tool; no CLI fallback",
+  "date": "2026-10-21",
+  "reference": "Original CasMANGO idle and wave PNGs; pointing lab-coat variant used as the outfit reference for subsequent poses",
+  "common_constraints": "Preserve CasMANGO identity: golden rounded-square head, cream face, dark brown outline and oval eyes, pink cheeks, twin green leaves, yellow-green DNA body, small golden hands and feet. All poses wear the same open white lab coat, with DNA visible. Cute polished shaded 2D style. One centered full-body mascot, transparent background, complete extremities, clear margin, no text or scenery.",
+  "pose_prompts": {
+    "idle": "Preserve the original standing neutral pose and gentle closed-mouth smile. Add the matching open white lab coat. Both arms relaxed, no props.",
+    "wave": "Preserve the original friendly waving pose and cheerful face. Add the matching lab coat. One raised waving hand, one relaxed hand. No floor shadow or other props.",
+    "point": "Friendly scientist guide in an open white lab coat, one hand extended toward the adjacent instructions, palm gently open, other arm relaxed, calm welcoming smile, no badges.",
+    "flask": "Thoughtful scientist in the same open white lab coat, holding one small Erlenmeyer flask containing teal liquid, looking attentively at it, other hand relaxed, soft friendly smile, no other equipment.",
+    "inspect": "Scientist in the matching lab coat, holding one small simple magnifying glass at chest level off to one side, curious gentle expression. Do not cover or distort the face; other hand relaxed.",
+    "checklist": "Scientist in the matching lab coat, holding a clipboard and simple pencil. Clipboard shows three small green checks and short horizontal strokes, no letters or numbers. Calm prepared friendly expression.",
+    "success": "Scientist in the matching lab coat giving one clear thumbs-up, warm happy smile, other hand relaxed. Restrained encouragement, no jumping, waving, speech bubble or confetti."
+  },
+  "delivery": "Transparent WebP, 360 x 432 pixels, quality 90 and alpha quality 100. Originals retained in the generated_images collection.",
+  "behavior": "Stable poses by subject block. Success appears only for completed interactive actions or tour completion, with one 520 ms acknowledgement; no repeating movement. Reduced-motion preference disables that animation."
+}

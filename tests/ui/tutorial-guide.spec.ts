@@ -42,6 +42,21 @@ describe('guided interaction boundaries', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
+  it('shows encouragement only after the required curation action succeeds', () => {
+    const { guide, state } = setup(); step(guide, 'result-curation', 'result');
+    expect(guide.mascotPose).toBe('checklist');
+    state.isCuratedView = true;
+    expect(guide.mascotPose).toBe('success');
+    expect(guide.mascotSrc).toBe('guide-mascots/success.webp');
+    (guide as any).pendingAction = true;
+    expect(guide.mascotPose).toBe('checklist');
+    (guide as any).pendingAction = false;
+    step(guide, 'result-metrics', 'result');
+    expect(guide.mascotPose).toBe('flask');
+    guide.guideMode = 'hub'; guide.currentStepIndex = 0;
+    expect(guide.mascotPose).toBe('idle');
+  });
+
   it('blocks unrelated controls even when they lie in the highlighted tabs bar', () => {
     const { guide } = setup(); step(guide, 'analysis-tabs');
     for (const type of ['pointerdown', 'click', 'keydown', 'contextmenu', 'drop']) {

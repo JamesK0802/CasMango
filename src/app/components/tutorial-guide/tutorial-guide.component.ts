@@ -5,6 +5,7 @@ import { FormArray } from '@angular/forms';
 import { AppStateService } from '../../services/app-state.service';
 import { ExcelExportService } from '../../services/excel-export.service';
 import { addTryExample } from './guide-demo';
+import { GUIDE_MASCOT_ASSETS, guideMascotPose, GuideMascotPose } from './guide-mascot';
 
 export interface AdvantageCard {
   title: string;
@@ -100,9 +101,11 @@ export interface GuideStep {
 
         <!-- Character Column (Left) -->
         <div class="mascot-col">
-          <div class="mascot-avatar-frame">
-            <img [src]="currentStepIndex === 0 ? 'casmango-mascot-wave.png' : 'casmango-mascot-idle.png'"
-                 alt="CasMANGO Mascot"
+          <div class="mascot-avatar-frame"
+               [attr.data-mascot-pose]="mascotPose"
+               [class.is-celebrating]="mascotPose === 'success'">
+            <img [src]="mascotSrc"
+                 alt="" aria-hidden="true" decoding="async" draggable="false"
                  class="mascot-avatar-img" />
           </div>
           <span class="mascot-tag">CasMANGO</span>
@@ -452,12 +455,21 @@ export interface GuideStep {
       height: 100%;
       object-fit: contain;
       filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.22));
-      animation: mascotFloat 3s ease-in-out infinite;
     }
 
-    @keyframes mascotFloat {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-4px); }
+    /* One small acknowledgement, not a looping distraction while reading. */
+    .mascot-avatar-frame.is-celebrating {
+      animation: mascotCelebrate 520ms ease-out 1;
+    }
+
+    @keyframes mascotCelebrate {
+      0%, 100% { transform: translateY(0) rotate(0); }
+      40% { transform: translateY(-4px) rotate(-3deg); }
+      70% { transform: translateY(-1px) rotate(1deg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mascot-avatar-frame.is-celebrating { animation: none; }
     }
 
     .mascot-tag {
@@ -1566,6 +1578,14 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     return this.currentSteps[this.currentStepIndex];
   }
 
+  get mascotPose(): GuideMascotPose {
+    return guideMascotPose(this.currentStep, this.isCurrentActionCompleted, this.pendingAction);
+  }
+
+  get mascotSrc(): string {
+    return GUIDE_MASCOT_ASSETS[this.mascotPose];
+  }
+
   get isLastStep(): boolean {
     return this.currentStepIndex === this.currentSteps.length - 1;
   }
@@ -1627,6 +1647,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    // Preload the small transparent assets so success feedback does not flash.
+    if (typeof Image !== 'undefined') {
+      for (const src of Object.values(GUIDE_MASCOT_ASSETS)) {
+        const image = new Image();
+        image.src = src;
+      }
+    }
     document.body?.classList.add('casmango-guide-active');
     this.guideMode = this.initialMode;
     if (this.guideMode === 'result') {
