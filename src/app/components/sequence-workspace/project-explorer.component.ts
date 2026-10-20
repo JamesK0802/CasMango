@@ -23,6 +23,10 @@ import { SequenceWorkspaceService } from '../../services/sequence-workspace.serv
       <div 
         *ngFor="let item of workspace.items$ | async" 
         class="item-row"
+        [attr.data-guide-item-id]="item.id"
+        role="button" tabindex="0"
+        (keydown.enter)="workspace.selectItem(item.id)"
+        (keydown.space)="$event.preventDefault(); workspace.selectItem(item.id)"
         [class.selected]="(workspace.selectedItemId$ | async) === item.id"
         (click)="workspace.selectItem(item.id)">
         <div class="item-icon">

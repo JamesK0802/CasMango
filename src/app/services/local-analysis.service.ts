@@ -333,8 +333,12 @@ export class LocalAnalysisService {
    */
   cancelAnalysis(): void {
     if (this.worker) {
-      this.worker.postMessage({ type: 'cancel' });
-      setTimeout(() => this.terminate(), 500);
+      const cancelledWorker = this.worker;
+      cancelledWorker.postMessage({ type: 'cancel' });
+      setTimeout(() => {
+        if (this.worker === cancelledWorker) this.terminate();
+        else cancelledWorker.terminate();
+      }, 500);
     }
   }
 

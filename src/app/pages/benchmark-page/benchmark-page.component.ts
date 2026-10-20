@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component } from '@angular/core';
+import { ChangeDetectorRef, Component, DoCheck, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { saveAs } from 'file-saver';
@@ -6,6 +6,7 @@ import { AppStateService } from '../../services/app-state.service';
 import { LocalAnalysisService, LocalAnalysisEvent } from '../../services/local-analysis.service';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
 import { parseIlluminaFilename } from '../../models/illumina.model';
+import { benchmarkExampleRows, normalizationExampleMates } from '../../components/tutorial-guide/module-examples';
 
 @Component({
   selector: 'app-benchmark-page',
@@ -13,7 +14,42 @@ import { parseIlluminaFilename } from '../../models/illumina.model';
   imports: [CommonModule, FormsModule],
   templateUrl: './benchmark-page.component.html'
 })
-export class BenchmarkPageComponent {
+export class BenchmarkPageComponent implements DoCheck, OnDestroy {
+  private mergeRevision = 0;
+  private guideLocalSnapshot?: Record<string, any>;
+  private readonly guideLocalKeys = ['benchmarkMode', 'benchmarkAdvancedOpen', 'mergeR1File', 'mergeR2File', 'mergeWindow', 'mergeOutputFile', 'mergeStats', 'mergeError', 'mergeProgress', 'mergeStage'];
+
+  ngDoCheck() {
+    if (this.state.guideBenchmarkActive && !this.guideLocalSnapshot) {
+      this.guideLocalSnapshot = Object.fromEntries(this.guideLocalKeys.map(k => [k, (this as any)[k]]));
+      this.benchmarkMode = 'classification';
+      this.mergeOutputFile = null; this.mergeStats = null;
+    } else if (!this.state.guideBenchmarkActive && this.guideLocalSnapshot) {
+      this.mergeRevision++;
+      if (this.mergeIsLoading) this.localAnalysis.cancelAnalysis();
+      this.mergeIsLoading = false;
+      Object.assign(this, this.guideLocalSnapshot);
+      this.guideLocalSnapshot = undefined;
+    }
+  }
+
+  ngOnDestroy() {
+    this.mergeRevision++;
+    if (this.guideLocalSnapshot && this.mergeIsLoading) this.localAnalysis.cancelAnalysis();
+  }
+
+  loadGuideClasses() {
+    if (!this.state.guideBenchmarkActive) return;
+    this.state.benchRows = benchmarkExampleRows();
+    this.state.benchmarkResult = null;
+  }
+
+  loadGuideMates() {
+    if (!this.state.guideBenchmarkActive) return;
+    const pair = normalizationExampleMates();
+    this.mergeR1File = pair.r1; this.mergeR2File = pair.r2;
+    this.mergeWindow = 90; this.mergeOutputFile = null; this.mergeStats = null;
+  }
   benchmarkMode: 'classification' | 'merge' = 'classification';
   benchmarkAdvancedOpen = false;
   mergeR1File: File | null = null;
@@ -133,6 +169,7 @@ export class BenchmarkPageComponent {
   }
 
   runMergeBench(): void {
+    const revision = ++this.mergeRevision;
     this.mergeError = '';
     const hasInput = this.mergeR1File || this.mergeR2File;
     if (!hasInput) {
@@ -151,6 +188,7 @@ export class BenchmarkPageComponent {
       params: { windowSize: this.mergeWindow },
     }).subscribe({
       next: (event: LocalAnalysisEvent) => {
+        if (revision !== this.mergeRevision) return;
         if (event.type === 'progress') {
           this.mergeProgress = event.percent;
           this.mergeStage = event.stage;
@@ -165,11 +203,14 @@ export class BenchmarkPageComponent {
           this.mergeIsLoading = false;
         }
         this.cdr.detectChanges();
+        this.state.benchmarkUpdated$.next();
       },
       error: error => {
+        if (revision !== this.mergeRevision) return;
         this.mergeError = error?.message || 'Illumina merge bench failed.';
         this.mergeIsLoading = false;
         this.cdr.detectChanges();
+        this.state.benchmarkUpdated$.next();
       }
     });
   }

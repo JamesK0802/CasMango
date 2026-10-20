@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { ProjectExplorerComponent } from '../../components/sequence-workspace/project-explorer.component';
@@ -144,6 +144,14 @@ type MobileWorkspacePanel = 'files' | 'viewer' | 'details';
   `]
 })
 export class SequenceWorkspacePageComponent implements OnDestroy {
+  @HostListener('window:casmango:guide-workspace-panel', ['$event'])
+  onGuidePanel(event: Event) {
+    const panel = (event as CustomEvent).detail?.panel;
+    if (['files', 'viewer', 'details'].includes(panel)) {
+      this.isSidebarCollapsed = false;
+      this.mobilePanel = panel;
+    }
+  }
   isSidebarCollapsed = false;
   mobilePanel: MobileWorkspacePanel = 'files';
   selectedItem: ProjectItem | null = null;

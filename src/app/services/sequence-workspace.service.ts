@@ -59,6 +59,26 @@ export class SequenceWorkspaceService {
   }
 
   private history: Record<string, { past: SequenceDocument[], future: SequenceDocument[] }> = {};
+  private guideSnapshot?: { items: ProjectItem[]; selected: string | null; region: {start: number; end: number; length: number} | null; autoAlign: AutoAlignPayload | null };
+
+  beginGuideExample(items: ProjectItem[]) {
+    if (!this.guideSnapshot) this.guideSnapshot = { items: this.itemsSubject.value, selected: this.selectedItemIdSubject.value,
+      region: this.selectedRegionSubject.value, autoAlign: this.pendingAutoAlignSubject.value };
+    this.itemsSubject.next(items);
+    this.selectItem(items[0]?.id ?? null);
+    this.clearRegion();
+    this.clearPendingAutoAlign();
+  }
+
+  endGuideExample() {
+    const saved = this.guideSnapshot;
+    if (!saved) return;
+    this.guideSnapshot = undefined;
+    this.itemsSubject.next(saved.items);
+    this.selectItem(saved.selected);
+    this.selectedRegionSubject.next(saved.region);
+    this.pendingAutoAlignSubject.next(saved.autoAlign);
+  }
   private readonly MAX_HISTORY = 20;
 
   constructor() {
@@ -99,6 +119,12 @@ export class SequenceWorkspaceService {
         const storedItems = request.result as ProjectItem[];
         const legacyExamples = storedItems.filter(item => item.id === 'example-1' && item.name === 'pUC19 Example');
         const items = storedItems.filter(item => !legacyExamples.includes(item));
+        if (this.guideSnapshot) {
+          // IndexedDB may finish opening after the guide has already begun.
+          this.guideSnapshot.items = items;
+          resolve();
+          return;
+        }
         this.itemsSubject.next(items);
         if (legacyExamples.some(item => item.id === this.selectedItemIdSubject.value)) {
           this.selectedItemIdSubject.next(null);
@@ -115,6 +141,10 @@ export class SequenceWorkspaceService {
   }
 
   async saveItem(item: ProjectItem) {
+    if (this.guideSnapshot) {
+      this.itemsSubject.next([...this.itemsSubject.value.filter(i => i.id !== item.id), structuredClone(item)]);
+      return;
+    }
     if (!this.db) await this.initDB();
     const clonedItem = JSON.parse(JSON.stringify(item));
     clonedItem.updatedTimestamp = Date.now();
@@ -133,6 +163,11 @@ export class SequenceWorkspaceService {
   }
 
   async deleteItem(id: string) {
+    if (this.guideSnapshot) {
+      this.itemsSubject.next(this.itemsSubject.value.filter(i => i.id !== id));
+      if (this.selectedItemIdSubject.value === id) this.selectItem(null);
+      return;
+    }
     if (!this.db) return;
     return new Promise<void>((resolve, reject) => {
       const transaction = this.db!.transaction(STORE_NAME, 'readwrite');

@@ -1468,6 +1468,8 @@ export class AppStateService {
 
   // ── Benchmark ──────────────────────────────────────────────────────────────
   benchPlatform: 'nanopore' | 'illumina' = 'nanopore';
+  guideBenchmarkActive = false;
+  benchmarkUpdated$ = new Subject<void>();
   benchPhred = 20;
   benchWindow = 90;
   benchMargin = 10;
@@ -1484,6 +1486,7 @@ export class AppStateService {
   benchError: string | null = null;
   benchmarkResult: BenchmarkResult | null = null;
   private benchProgressAnimId: any = null;
+  private benchRunRevision = 0;
   private localBenchSub: Subscription | null = null;
 
   addBenchRow() {
@@ -1534,6 +1537,7 @@ export class AppStateService {
   }
 
   runBenchmarkLocal() {
+    const revision = ++this.benchRunRevision;
     this.benchIsLoading = true;
     this.benchError = null;
     this.clearBenchProgress();
@@ -1581,6 +1585,7 @@ export class AppStateService {
 
     this.localBenchSub = this.localAnalysisService.startBenchmarkRun(dataset, [...genesByName.values()], params).subscribe({
       next: (event: any) => {
+        if (revision !== this.benchRunRevision) return;
         this.ngZone.run(() => {
           if (event.type === 'progress') {
             this.setBenchProgress(event.percent, event.stage);
@@ -1588,26 +1593,33 @@ export class AppStateService {
             this.benchmarkResult = event.payload;
             this.setBenchProgress(100, 'Benchmark complete ✓');
             setTimeout(() => {
-              this.ngZone.run(() => { this.benchIsLoading = false; });
+              if (revision === this.benchRunRevision) this.ngZone.run(() => {
+                this.benchIsLoading = false;
+                this.benchmarkUpdated$.next();
+              });
             }, 800);
           } else if (event.type === 'error') {
             this.benchError = event.message;
             this.benchIsLoading = false;
             this.clearBenchProgress();
+            this.benchmarkUpdated$.next();
           }
         });
       },
       error: (err) => {
+        if (revision !== this.benchRunRevision) return;
         this.ngZone.run(() => {
           this.benchError = err?.message || 'Benchmark calculation failed.';
           this.benchIsLoading = false;
           this.clearBenchProgress();
+          this.benchmarkUpdated$.next();
         });
       }
     });
   }
 
   cancelBenchmark() {
+    this.benchRunRevision++;
     if (this.localBenchSub) {
       this.localBenchSub.unsubscribe();
       this.localBenchSub = null;

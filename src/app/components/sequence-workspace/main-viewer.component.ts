@@ -25,8 +25,8 @@ import { FastqViewerComponent } from './fastq-viewer.component';
 
           <div class="viewer-tabs" *ngIf="item.type === 'sequence'">
             <button class="tab-btn" [class.active]="activeTab === 'sequence'" (click)="activeTab = 'sequence'">Sequence</button>
-            <button class="tab-btn" [class.active]="activeTab === 'map'" (click)="activeTab = 'map'">Map</button>
-            <button class="tab-btn" [class.active]="activeTab === 'features'" (click)="activeTab = 'features'">Features</button>
+            <button id="guide-workspace-map-btn" class="tab-btn" [attr.aria-pressed]="activeTab === 'map'" [class.active]="activeTab === 'map'" (click)="activeTab = 'map'">Map</button>
+            <button id="guide-workspace-features-btn" class="tab-btn" [attr.aria-pressed]="activeTab === 'features'" [class.active]="activeTab === 'features'" (click)="activeTab = 'features'">Features</button>
           </div>
         </div>
 

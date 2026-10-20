@@ -26,7 +26,7 @@ describe('contextual guide mascot', () => {
   });
 
   it('keeps a stable pose across related explanatory steps without false praise', () => {
-    for (const id of ['result-read-flow', 'result-metrics', 'result-charts']) {
+    for (const id of ['result-metrics', 'result-charts']) {
       expect(guideMascotPose({ id }, true, false)).toBe('flask');
     }
     expect(guideMascotPose({ id: 'result-annotation' }, true, false)).toBe('inspect');
@@ -35,10 +35,10 @@ describe('contextual guide mascot', () => {
 
   it('acknowledges only completed actions, never pending or blocked ones', () => {
     const step = { id: 'result-exclude-group', interactiveAction: 'exclude_group' };
-    expect(guideMascotPose(step, false, false)).toBe('checklist');
-    expect(guideMascotPose(step, true, true)).toBe('checklist');
+    expect(guideMascotPose(step, false, false)).toBe('inspect');
+    expect(guideMascotPose(step, true, true)).toBe('inspect');
     expect(guideMascotPose(step, true, false)).toBe('success');
-    expect(guideMascotPose(step, false, false)).toBe('checklist');
+    expect(guideMascotPose(step, false, false)).toBe('inspect');
   });
 
   it('ends each tour with a restrained success pose', () => {

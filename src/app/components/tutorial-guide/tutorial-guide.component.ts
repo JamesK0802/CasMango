@@ -2,10 +2,13 @@ import { Component, EventEmitter, Input, Output, OnDestroy, OnInit, ChangeDetect
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { FormArray } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { AppStateService } from '../../services/app-state.service';
 import { ExcelExportService } from '../../services/excel-export.service';
 import { addTryExample } from './guide-demo';
 import { GUIDE_MASCOT_ASSETS, guideMascotPose, GuideMascotPose } from './guide-mascot';
+import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
+import { workspaceExampleItems } from './module-examples';
 
 export interface AdvantageCard {
   title: string;
@@ -30,7 +33,7 @@ export interface GuideStep {
   isPrereq?: boolean;
   isFinal?: boolean;
   nextButtonText?: string;
-  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer';
+  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer' | 'workspace_map' | 'workspace_features' | 'workspace_reads' | 'bench_load' | 'bench_run' | 'bench_normalization' | 'bench_mates' | 'bench_normalize';
   actionPromptText?: string;
   actionSuccessText?: string;
 }
@@ -191,6 +194,16 @@ export interface GuideStep {
               <span>{{ currentStep.actionSuccessText }}</span>
             </div>
           </div>
+
+          <div *ngIf="currentStep.id === 'result-viewer-reproduce' && !viewerLoaded" class="guide-report-file">
+            <div role="button" tabindex="0" draggable="true" (dragstart)="dragGuideReport($event)" (click)="armGuideReport()"
+                    (keydown.enter)="armGuideReport()" (keydown.space)="$event.preventDefault(); armGuideReport()"
+                    [attr.aria-pressed]="reportArmed" aria-label="Drag the exported example report to the empty Result Viewer, or select it then click the drop zone">
+              📄 {{ state.lastExportedFile?.name || 'Export the example report first' }}
+            </div>
+            <small>{{ reportArmed ? 'Example selected — now click the empty drop zone.' : 'Drag this file into the highlighted empty drop zone. On touch devices, select it and then tap the drop zone.' }}</small>
+          </div>
+          <p *ngIf="guideImportError" class="guide-import-error" role="alert">{{ guideImportError }}</p>
 
           <!-- Footer Actions -->
           <div class="bubble-footer">
@@ -456,6 +469,15 @@ export interface GuideStep {
       object-fit: contain;
       filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.22));
     }
+    .mascot-avatar-frame[data-mascot-pose="success"] .mascot-avatar-img {
+      transform: scale(1.14);
+      transform-origin: center bottom;
+    }
+    .guide-report-file { display: grid; gap: 8px; margin: 12px 0; }
+    .guide-report-file [role="button"] { padding: 12px; border: 1px dashed #d97706; border-radius: 10px; background: #fffbeb; color: #78350f; cursor: grab; overflow-wrap: anywhere; text-align: center; }
+    .guide-report-file [role="button"][aria-pressed="true"] { border-style: solid; background: #fef3c7; }
+    .guide-report-file small { color: #64748b; line-height: 1.5; }
+    .guide-import-error { color: #b91c1c; }
 
     /* One small acknowledgement, not a looping distraction while reading. */
     .mascot-avatar-frame.is-celebrating {
@@ -944,6 +966,14 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   curationTested = false;
   exportTested = false;
   viewerLoaded = false;
+  reportArmed = false;
+  guideImportError = '';
+  private viewerPrepared = false;
+  private restorePreview?: { slot: AppStateService['viewerSlot']; config: AppStateService['curationConfig']; curated: boolean; original: AppStateService['originalSlotSnapshot'] };
+  private savedBenchmark?: Record<string, any>;
+  private benchmarkUpdates?: Subscription;
+  benchmarkUnavailable = false;
+  private readonly benchmarkKeys = ['benchPlatform', 'benchPhred', 'benchWindow', 'benchMargin', 'benchDistanceWeight', 'benchExclusionFlank', 'benchCustomWindow', 'benchWindowLeft', 'benchWindowRight', 'benchRows', 'benchmarkResult', 'benchError'];
 
   private rafId: number | null = null;
   private destroyed = false;
@@ -1213,7 +1243,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       id: 'workspace-overview',
       stageName: 'Sequence Viewer',
       headline: 'Sequence Workspace Overview',
-      introLine: 'The Sequence Viewer offers full multi-sequence alignment, feature annotation, and Sanger / NGS read visualization in your browser.',
+      introLine: 'Explore a temporary annotated CPC reference and three synthetic reads: WT, −1 bp and +1 bp. Your own saved sequences are restored when you leave this tour.',
       cards: [
         {
           badge: 'Explorer',
@@ -1239,8 +1269,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Project Explorer',
       headline: 'Project Explorer & File Hierarchy',
       textLines: [
-        '• Manage your sequence documents, references, and imported FASTQ reads.',
-        '• Click to collapse or expand folders, rename items, and select sequences for viewing.'
+        'The example contains an annotated CPC reference and a FASTQ document with three synthetic reads. This temporary workspace is separate from your saved items.'
       ],
       targetSelector: '#guide-workspace-explorer',
       nextButtonText: 'Next: Main Alignment Viewer ▶'
@@ -1254,7 +1283,20 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         '• Toggle between linear map, circular plasmid map, and multi-read pairwise alignment views.'
       ],
       targetSelector: '#guide-workspace-viewer',
-      nextButtonText: 'Next: Feature Inspector ▶'
+      nextButtonText: 'Next: Open the Map ▶'
+    },
+    {
+      id: 'workspace-map', stageName: 'Try the Map', headline: 'Open the annotated reference map',
+      textLines: ['Click Map to see the gRNA target and PAM on the CPC reference. The sequence and map are views of the same example document.'],
+      targetSelector: '#guide-workspace-map-btn', interactiveAction: 'workspace_map',
+      actionPromptText: 'Click Map above the sequence', actionSuccessText: 'Map opened. The target and PAM remain attached to the reference.',
+      nextButtonText: 'Next: Feature Table ▶'
+    },
+    {
+      id: 'workspace-features', stageName: 'Try Features', headline: 'Inspect the annotated features',
+      textLines: ['Click Features to review the target and PAM coordinates. These are synthetic tutorial annotations, not an experimental result.'],
+      targetSelector: '#guide-workspace-features-btn', interactiveAction: 'workspace_features',
+      actionPromptText: 'Click Features', actionSuccessText: 'Feature table opened.', nextButtonText: 'Next: Feature Inspector ▶'
     },
     {
       id: 'workspace-inspector',
@@ -1265,7 +1307,19 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         '• Edit features or export clean FASTA sequences directly.'
       ],
       targetSelector: '#guide-workspace-inspector',
-      nextButtonText: 'Next: Benchmark Guide ▶'
+      nextButtonText: 'Next: Example FASTQ Reads ▶'
+    },
+    {
+      id: 'workspace-reads', stageName: 'Example Reads', headline: 'Open the WT and edited read example',
+      textLines: ['Select “Guide · WT and edited reads.fastq” in the explorer. The FASTQ viewer contains WT, −1 bp and +1 bp reads and a preconfigured 90-bp reference window.'],
+      targetSelector: '#guide-workspace-explorer', interactiveAction: 'workspace_reads',
+      actionPromptText: 'Click the example FASTQ file name', actionSuccessText: 'Example FASTQ opened. The reads and quality information are ready to inspect.',
+      nextButtonText: 'Next: Read Viewer ▶'
+    },
+    {
+      id: 'workspace-read-view', stageName: 'Read Viewer', headline: 'Read quality and alignment workspace',
+      textLines: ['The example contains three Q40 synthetic reads. In your own workspace, use its filtering and alignment controls to inspect reads against the supplied reference. This explanation is read-only.'],
+      targetSelector: '#guide-workspace-viewer', nextButtonText: 'Finish Sequence Viewer Tour ▶'
     },
     {
       id: 'workspace-final',
@@ -1313,18 +1367,53 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         '• Toggle between Nanopore long-read amplicons and Illumina paired-end libraries.'
       ],
       targetSelector: '#guide-bench-params-card',
-      nextButtonText: 'Next: Labelled Dataset ▶'
+      nextButtonText: 'Next: Load a Small Example ▶'
     },
     {
       id: 'benchmark-dataset',
       stageName: 'Dataset Setup',
       headline: 'Labelled Classes & Expected References',
       textLines: [
-        '• Add classes with defined ground-truth gene references, gRNA spacers, and test FASTQ reads.',
-        '• Run Benchmark to obtain instant confusion metrics (Correct %, Wrong %, Ambiguous %).'
+        'Load two labelled classes: CPC and TRY, with 12 synthetic Q40 reads each (8 WT and 4 one-base deletions). The expected gene comes from each input row. Your own benchmark inputs are preserved.'
       ],
       targetSelector: '#guide-bench-dataset-card',
-      nextButtonText: 'Next: Illumina Normalization ▶'
+      interactiveAction: 'bench_load', actionPromptText: 'Click Load CPC + TRY example', actionSuccessText: 'Both labelled FASTQ classes are loaded.',
+      nextButtonText: 'Next: Run the Benchmark ▶'
+    },
+    {
+      id: 'benchmark-run', stageName: 'Run Classification', headline: 'Run the real classification pipeline',
+      textLines: ['Click Run Benchmark. This small example runs locally through the same pipeline as the main tool; the displayed metrics are calculated, not prefilled.'],
+      targetSelector: '#guide-bench-run', interactiveAction: 'bench_run',
+      actionPromptText: 'Click Run Benchmark and wait for completion', actionSuccessText: 'Classification finished. Continue to the calculated metrics.',
+      nextButtonText: 'Next: Classification Results ▶'
+    },
+    {
+      id: 'benchmark-results', stageName: 'Calculated Metrics', headline: 'Read the classification results',
+      textLines: ['Correct, Wrong and Ambiguous describe reference assignment among usable reads. The per-class table also reports filtered reads. This deliberately small error-free example demonstrates the workflow, not real-world accuracy.'],
+      targetSelector: '#guide-bench-results', nextButtonText: 'Next: Illumina Normalization ▶'
+    },
+    {
+      id: 'benchmark-normalization-mode', stageName: 'Illumina Normalization', headline: 'Switch to the normalization bench',
+      textLines: ['The second benchmark utility inspects paired-end read preparation independently of reference assignment.'],
+      targetSelector: '#guide-bench-normalization-btn', interactiveAction: 'bench_normalization',
+      actionPromptText: 'Click Illumina Normalization', actionSuccessText: 'Normalization bench opened.', nextButtonText: 'Next: Load Example Mates ▶'
+    },
+    {
+      id: 'benchmark-mates', stageName: 'Example Mate Pairs', headline: 'Load overlapping and separated mates',
+      textLines: ['Load two synthetic mate pairs: one with a true overlap and one with separated reference ends. R2 uses the reverse-complement orientation. The X guard is 90 bp.'],
+      targetSelector: '#guide-bench-mates', interactiveAction: 'bench_mates', actionPromptText: 'Click Load example R1 + R2',
+      actionSuccessText: 'Both mate files are loaded.', nextButtonText: 'Next: Normalize Reads ▶'
+    },
+    {
+      id: 'benchmark-normalize', stageName: 'Run Normalization', headline: 'Normalize the example mates locally',
+      textLines: ['Run normalization to calculate consensus and X-padded output from these actual example FASTQ files.'],
+      targetSelector: '#guide-bench-normalize-run', interactiveAction: 'bench_normalize', actionPromptText: 'Click Normalize Illumina Reads',
+      actionSuccessText: 'Normalization complete. The output statistics are calculated from the example.', nextButtonText: 'Next: Normalized Output ▶'
+    },
+    {
+      id: 'benchmark-normalization-results', stageName: 'Normalized Output', headline: 'Consensus and X-padded output',
+      textLines: ['The overlapping pair forms a consensus; separated mates retain their sequence with an X guard. After the tour, you can use Download FASTQ or Open in Sequence Viewer on your own output.'],
+      targetSelector: '#guide-bench-normalization-results', nextButtonText: 'Finish Benchmark Tour ▶'
     },
     {
       id: 'benchmark-final',
@@ -1521,12 +1610,11 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Result Viewer',
       headline: 'Reproduce Results in Result Viewer',
       textLines: [
-        '• Click the Result Viewer tab in the navigation bar.',
-        '• Drop or load your exported Excel report into the dropzone to instantly restore the complete analysis dashboard—including any active curation states!'
+        'The Result Viewer is now empty. Drag the exported example file below into its highlighted drop zone to restore the dashboard. Switching tabs alone does not load anything.'
       ],
-      targetSelector: '#guide-viewer-tab-btn',
+      targetSelector: '#guide-viewer-dropzone',
       interactiveAction: 'switch_to_viewer',
-      actionPromptText: 'Click the "Result Viewer" tab in the top navigation bar',
+      actionPromptText: 'Drop the exported .xlsx file into the empty Result Viewer',
       actionSuccessText: 'Result loaded into Result Viewer! Complete dashboard restored.',
       nextButtonText: 'Next: Sequence Viewer Guide ▶'
     },
@@ -1555,7 +1643,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     public state: AppStateService,
     private cdr: ChangeDetectorRef,
     private sanitizer: DomSanitizer,
-    private excel: ExcelExportService
+    private excel: ExcelExportService,
+    private workspace?: SequenceWorkspaceService
   ) {}
 
   get currentSteps(): GuideStep[] {
@@ -1596,6 +1685,11 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   get currentStepTargetSelector(): string | undefined {
     const step = this.currentStep;
+    if (step.id === 'result-viewer-reproduce' && this.viewerLoaded) return '#resultsSection';
+    if (['workspace-map', 'workspace-features', 'workspace-reads'].includes(step.id) && this.isCurrentActionCompleted) return '#guide-workspace-viewer';
+    if (step.id === 'benchmark-run' && this.isCurrentActionCompleted) return '#guide-bench-results';
+    if (step.id === 'benchmark-normalization-mode' && this.isCurrentActionCompleted) return '#guide-bench-normalization-params';
+    if (step.id === 'benchmark-normalize' && this.isCurrentActionCompleted) return '#guide-bench-normalization-results';
     if (step.id === 'result-curation' && this.state.isCuratedView) return '#guide-annotation-panel';
     if (step.id === 'result-export-report' && this.state.isCuratedView) return '#guide-export-curated-btn';
     if (step.id === 'file-upload' && this.demoFilesLoaded) {
@@ -1630,6 +1724,14 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         return this.exportTested || this.state.lastExportedFile !== null;
       case 'switch_to_viewer':
         return this.viewerLoaded;
+      case 'workspace_map': return !!document.querySelector('#guide-workspace-map-btn[aria-pressed="true"]');
+      case 'workspace_features': return !!document.querySelector('#guide-workspace-features-btn[aria-pressed="true"]');
+      case 'workspace_reads': return this.workspace?.getSelectedItem()?.id === 'guide-cpc-reads';
+      case 'bench_load': return !!this.state.benchRows?.length && this.state.benchRows.every(r => r.file?.name.startsWith('guide_'));
+      case 'bench_run': return !!this.state.benchmarkResult && !this.state.benchIsLoading;
+      case 'bench_normalization': return !!document.querySelector('#guide-bench-normalization-params');
+      case 'bench_mates': return !!document.querySelector('#guide-bench-mates[data-guide-loaded="true"]');
+      case 'bench_normalize': return !!document.querySelector('#guide-bench-normalization-results[data-guide-complete="true"]');
       default:
         return true;
     }
@@ -1637,6 +1739,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   get isNextButtonEnabled(): boolean {
     if (this.pendingAction) return false;
+    if (this.guideMode === 'benchmark' && this.benchmarkUnavailable) return false;
     const step = this.currentStep;
     if (step.targetSelector && !document.querySelector(this.currentStepTargetSelector!)) return false;
     if (step.isIntro || step.isPrereq) return true;
@@ -1647,6 +1750,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.benchmarkUpdates = this.state.benchmarkUpdated$?.subscribe(() => {
+      if (this.guideMode === 'benchmark' && !this.destroyed) {
+        // Refresh the parent/sibling page as well as this overlay in zoneless Angular.
+        this.requestTab.emit('benchmark');
+        this.later(() => { this.cdr.detectChanges(); this.updateLayoutInstant(); }, 50);
+      }
+    });
     // Preload the small transparent assets so success feedback does not flash.
     if (typeof Image !== 'undefined') {
       for (const src of Object.values(GUIDE_MASCOT_ASSETS)) {
@@ -1661,6 +1771,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.ensureFigure2SyntheticDataLoaded();
     } else {
       this.state.collapseAnalysisPanels();
+      if (this.guideMode === 'workspace') this.startSequenceWorkspaceGuide();
+      if (this.guideMode === 'benchmark') this.startBenchmarkGuide();
     }
     for (const type of this.guardedEvents) window.addEventListener(type, this.boundInteraction, { capture: true, passive: false });
     (document.activeElement as HTMLElement | null)?.blur();
@@ -1669,6 +1781,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.benchmarkUpdates?.unsubscribe();
     document.body?.classList.remove('casmango-guide-active');
     this.destroyed = true;
     this.clearPendingActions();
@@ -1679,6 +1792,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     }
     this.removeGuideTab();
     this.restoreViewer();
+    this.restoreModuleExamples();
   }
 
   // The spotlight is visual only. Enforce interaction rules at capture phase,
@@ -1696,7 +1810,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'result-exclude-group': return this.excludedExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-restore-group': return this.restoredExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-export-report': return this.exportTested ? [] : [this.state.isCuratedView ? '#guide-export-curated-btn' : '#guide-export-excel-btn'];
-      case 'result-viewer-reproduce': return this.viewerLoaded ? [] : ['#guide-viewer-tab-btn'];
+      case 'result-viewer-reproduce': return this.viewerLoaded || !this.reportArmed ? [] : ['#guide-viewer-dropzone'];
+      case 'workspace-map': return ['#guide-workspace-map-btn'];
+      case 'workspace-features': return ['#guide-workspace-features-btn'];
+      case 'workspace-reads': return ['[data-guide-item-id="guide-cpc-reads"]'];
+      case 'benchmark-dataset': return this.isCurrentActionCompleted ? [] : ['#guide-bench-load-classes'];
+      case 'benchmark-run': return this.isCurrentActionCompleted ? [] : ['#guide-bench-run'];
+      case 'benchmark-normalization-mode': return ['#guide-bench-normalization-btn'];
+      case 'benchmark-mates': return this.isCurrentActionCompleted ? [] : ['#guide-bench-load-mates'];
+      case 'benchmark-normalize': return this.isCurrentActionCompleted ? [] : ['#guide-bench-normalize-run'];
       default: return []; // Explanatory steps are read-only, even inside the spotlight.
     }
   }
@@ -1712,6 +1834,21 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       event.preventDefault(); event.stopImmediatePropagation(); this.closeGuide(); return;
     }
     if (target.closest('app-tutorial-guide')) return;
+    if (this.currentStep.id === 'workspace-reads' && target.closest('.item-actions')) {
+      event.preventDefault(); event.stopImmediatePropagation(); return;
+    }
+    if (this.currentStep.id === 'result-viewer-reproduce' && target.closest('#guide-viewer-dropzone')
+        && !this.viewerLoaded && !this.pendingAction && ['dragover', 'drop'].includes(event.type)) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      const transfer = (event as DragEvent).dataTransfer;
+      if (event.type === 'dragover') { if (transfer) transfer.dropEffect = 'copy'; return; }
+      const file = transfer?.getData('application/x-casmango-guide-report') === 'example'
+        ? this.state.lastExportedFile : transfer?.files?.[0];
+      if (file?.name?.toLowerCase().endsWith('.xlsx')) void this.importGuideResult(file);
+      else this.guideImportError = 'Drop the exported .xlsx report here.';
+      this.cdr.detectChanges();
+      return;
+    }
     if (['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)
         && ['pointerdown', 'mousedown', 'touchstart'].includes(event.type)) {
       // A tutorial click must not start the normal drag-to-delete sweep.
@@ -1840,13 +1977,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       }
     }
 
-    // 8. Result Guide Step: Reproduce in Result Viewer tab
+    // 8. Restore only after a drop (or the accessible select-then-drop fallback).
     if (this.currentStep.id === 'result-viewer-reproduce') {
-      if (target.closest('#guide-viewer-tab-btn')) {
+      if (target.closest('#guide-viewer-dropzone') && this.reportArmed) {
         event.preventDefault(); event.stopImmediatePropagation();
-        this.requestTab.emit('viewer');
-        void this.simulateDropIntoResultViewer();
+        void this.importGuideResult();
       }
+    }
+    if (['workspace-map', 'workspace-features', 'workspace-reads', 'benchmark-dataset', 'benchmark-run', 'benchmark-normalization-mode', 'benchmark-mates', 'benchmark-normalize'].includes(this.currentStep.id)) {
+      this.later(() => { this.cdr.detectChanges(); this.updateLayoutInstant(); }, 100);
     }
   }
 
@@ -1930,6 +2069,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     this.closeWindowCheckPanel();
     this.state.collapseAnalysisPanels();
     this.removeGuideTab();
+    this.restoreModuleExamples();
+    this.restoreViewer();
     this.close.emit();
   }
 
@@ -1966,6 +2107,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    */
   returnToHub() {
     this.clearPendingActions();
+    this.restoreModuleExamples();
     this.closeWindowCheckPanel();
     this.state.collapseAnalysisPanels();
     this.guideMode = 'hub';
@@ -1985,6 +2127,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    */
   startAnalysisGuide() {
     this.clearPendingActions();
+    this.restoreModuleExamples();
     this.removeGuideTab();
     this.restoreViewer();
     this.demoFilesLoaded = false;
@@ -2007,6 +2150,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    */
   startResultsGuide() {
     this.clearPendingActions();
+    this.restoreModuleExamples();
     this.closeWindowCheckPanel();
     this.guideMode = 'result';
     this.currentStepIndex = 0;
@@ -2025,6 +2169,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    */
   startSequenceWorkspaceGuide() {
     this.clearPendingActions();
+    this.restoreModuleExamples();
+    this.restoreViewer();
+    this.workspace?.beginGuideExample(workspaceExampleItems());
     this.guideMode = 'workspace';
     this.currentStepIndex = 0;
     this.requestTab.emit('workspace');
@@ -2041,6 +2188,16 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    */
   startBenchmarkGuide() {
     this.clearPendingActions();
+    this.restoreModuleExamples();
+    this.restoreViewer();
+    this.benchmarkUnavailable = !!this.state.benchIsLoading || !!document.querySelector('#guide-bench-normalize-run[data-guide-running="true"]');
+    if (!this.benchmarkUnavailable) {
+      this.savedBenchmark = Object.fromEntries(this.benchmarkKeys.map(k => [k, (this.state as any)[k]]));
+      Object.assign(this.state, { guideBenchmarkActive: true, benchPlatform: 'nanopore', benchWindow: 90, benchPhred: 20,
+        benchMargin: 10, benchDistanceWeight: 0, benchExclusionFlank: 0, benchCustomWindow: false,
+        benchWindowLeft: 45, benchWindowRight: 45, benchRows: [], benchmarkResult: null, benchError: null });
+    }
+    this.guideImportError = this.benchmarkUnavailable ? 'A benchmark is already running. Exit this guide and let it finish before starting the example.' : '';
     this.guideMode = 'benchmark';
     this.currentStepIndex = 0;
     this.requestTab.emit('benchmark');
@@ -2065,6 +2222,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.state.viewerSlot = structuredClone(this.state.viewerSlot);
     }
     this.curationTested = false; this.exportTested = false; this.viewerLoaded = false;
+    this.viewerPrepared = false; this.restorePreview = undefined; this.reportArmed = false; this.guideImportError = '';
     this.excludedExample = false; this.restoredExample = false;
     this.state.lastExportedFile = null;
     this.state.guideReadActionsPreview = true;
@@ -2073,6 +2231,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   private restoreViewer() {
+    this.restorePreview = undefined; this.viewerPrepared = false; this.reportArmed = false; this.guideImportError = '';
     this.state.guideReadActionsPreview = false;
     if (!this.savedViewer) return;
     this.state.viewerSlot = this.savedViewer;
@@ -2106,12 +2265,21 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Simulates loading exported Excel into Result Viewer when reaching step R7.
-   */
-  private async simulateDropIntoResultViewer() {
-    const file = this.state.lastExportedFile;
+  dragGuideReport(event: DragEvent) {
+    if (!this.state.lastExportedFile) { event.preventDefault(); return; }
+    this.reportArmed = true;
+    event.dataTransfer?.setData('application/x-casmango-guide-report', 'example');
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
+  }
+
+  armGuideReport() {
+    this.reportArmed = !!this.state.lastExportedFile;
+  }
+
+  /** Called only after the user drops/selects a report in the empty viewer. */
+  private async importGuideResult(file: File | null = this.state.lastExportedFile) {
     if (!file) return;
+    this.guideImportError = '';
     this.pendingAction = true;
     const revision = this.actionRevision;
     const step = this.currentStepIndex;
@@ -2120,10 +2288,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       if (this.destroyed || this.actionRevision !== revision || this.guideMode !== 'result' || this.currentStepIndex !== step) return;
       this.state.activateSlot('viewer');
       this.state.loadResultData(data);
-      this.state.guideReadActionsPreview = false;
+      this.state.guideReadActionsPreview = true;
       this.viewerLoaded = true;
+      this.requestTab.emit('viewer');
+      this.later(() => { this.cdr.detectChanges(); this.updateLayoutInstant(); }, 50);
     } catch {
-      if (this.actionRevision === revision) this.viewerLoaded = false;
+      if (this.actionRevision === revision) {
+        this.viewerLoaded = false;
+        this.guideImportError = 'The report could not be imported. Drop a valid CasMANGO .xlsx export and try again.';
+      }
     } finally {
       if (!this.destroyed && this.actionRevision === revision && this.guideMode === 'result' && this.currentStepIndex === step) {
         this.pendingAction = false; this.cdr.detectChanges(); this.updateLayoutInstant();
@@ -2311,6 +2484,29 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    */
   private handleStepSideEffects() {
     const step = this.currentStep;
+    if (step.id === 'result-viewer-reproduce' && !this.viewerPrepared) {
+      this.restorePreview = { slot: this.state.viewerSlot, config: this.state.curationConfig,
+        curated: this.state.isCuratedView, original: this.state.originalSlotSnapshot };
+      this.state.newViewer();
+      this.viewerLoaded = false; this.reportArmed = false; this.guideImportError = ''; this.viewerPrepared = true;
+      this.requestTab.emit('viewer');
+    } else if (this.guideMode === 'result' && !step.isFinal && step.id !== 'result-viewer-reproduce' && this.restorePreview) {
+      this.state.viewerSlot = this.restorePreview.slot;
+      this.state.curationConfig = this.restorePreview.config;
+      this.state.isCuratedView = this.restorePreview.curated;
+      this.state.originalSlotSnapshot = this.restorePreview.original;
+      this.restorePreview = undefined; this.viewerPrepared = false; this.viewerLoaded = false;
+      this.guideImportError = ''; this.state.resultsUpdated$.next();
+    }
+    if (this.guideMode === 'workspace') {
+      if (step.id === 'workspace-inspector') this.workspace?.selectItem('guide-cpc-reference');
+      const panel = step.id === 'workspace-explorer' || step.id === 'workspace-reads' ? 'files'
+        : step.id === 'workspace-inspector' ? 'details' : 'viewer';
+      this.later(() => window.dispatchEvent(new CustomEvent('casmango:guide-workspace-panel', { detail: { panel } })), 50);
+    }
+    if (this.guideMode === 'benchmark' && ['benchmark-params', 'benchmark-dataset', 'benchmark-run', 'benchmark-results'].includes(step.id)) {
+      this.clickInternally('#guide-bench-classification-btn');
+    }
 
     // Step: Auto Fill - ensure Auto Fill panel is opened
     if (step.id === 'autofill-panel') {
@@ -2330,6 +2526,17 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         if (advBtn) this.clickInternally('#guide-advanced-btn');
       }
     }
+  }
+
+  private restoreModuleExamples() {
+    this.workspace?.endGuideExample();
+    if (this.savedBenchmark) {
+      if (this.state.benchIsLoading || document.querySelector('#guide-bench-normalize-run[data-guide-running="true"]')) this.state.cancelBenchmark();
+      Object.assign(this.state, this.savedBenchmark);
+      this.savedBenchmark = undefined;
+      this.state.guideBenchmarkActive = false;
+    }
+    this.benchmarkUnavailable = false;
   }
 
   /**

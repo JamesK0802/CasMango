@@ -18,10 +18,11 @@ function setup() {
     viewerSlot: { genes: [{ gene: 'USER' }], nested: { count: 1 } },
     analysisSlot: { genes: [{ gene: 'ANALYSIS' }] }, activeMode: 'analysis',
     isCuratedView: false, curationConfig: null, originalSlotSnapshot: null, lastExportedFile: null,
-    resultsUpdated$: new Subject(), collapseAnalysisPanels: vi.fn(),
+    resultsUpdated$: new Subject(), benchmarkUpdated$: new Subject(), collapseAnalysisPanels: vi.fn(),
     activateSlot(mode: string) { this.activeMode = mode; },
     loadResultData: vi.fn(function(this: any, data: any) { this.viewerSlot.genes = data.scopes[0].genes; }),
     addTab: vi.fn(), tabs: [], selectedFiles: [], illuminaPairs: [],
+    newViewer: vi.fn(function(this: any) { this.viewerSlot = { genes: [] }; this.isCuratedView = false; this.curationConfig = null; this.originalSlotSnapshot = null; }),
   };
   const excel: any = { importFromExcel: vi.fn() };
   const guide = new TutorialGuideComponent(state, { detectChanges: vi.fn() } as any, {} as any, excel);
@@ -44,12 +45,12 @@ describe('guided interaction boundaries', () => {
 
   it('shows encouragement only after the required curation action succeeds', () => {
     const { guide, state } = setup(); step(guide, 'result-curation', 'result');
-    expect(guide.mascotPose).toBe('checklist');
+    expect(guide.mascotPose).toBe('inspect');
     state.isCuratedView = true;
     expect(guide.mascotPose).toBe('success');
     expect(guide.mascotSrc).toBe('guide-mascots/success.webp');
     (guide as any).pendingAction = true;
-    expect(guide.mascotPose).toBe('checklist');
+    expect(guide.mascotPose).toBe('inspect');
     (guide as any).pendingAction = false;
     step(guide, 'result-metrics', 'result');
     expect(guide.mascotPose).toBe('flask');
@@ -218,11 +219,19 @@ describe('Results guide entry and readiness', () => {
     (guide as any).restoreViewer(); expect(state.guideReadActionsPreview).toBe(false);
   });
 
+  it('restores the original viewer before emitting guide close', () => {
+    const { guide, state } = setup(); const original = state.viewerSlot;
+    guide.startResultsGuide();
+    const closed = vi.fn(() => expect(state.viewerSlot).toBe(original));
+    guide.close.subscribe(closed); guide.closeGuide();
+    expect(closed).toHaveBeenCalledOnce();
+  });
+
   it('waits for the actual Excel import before completing the reproduction step', async () => {
     const { guide, state, excel } = setup(); step(guide, 'result-viewer-reproduce', 'result'); state.lastExportedFile = {};
     let resolve!: (data: any) => void;
     excel.importFromExcel.mockReturnValue(new Promise(r => resolve = r));
-    const task = (guide as any).simulateDropIntoResultViewer();
+    const task = (guide as any).importGuideResult();
     expect(guide.viewerLoaded).toBe(false); expect((guide as any).pendingAction).toBe(true);
     resolve({ scopes: [{ genes: [] }] }); await task;
     expect(guide.viewerLoaded).toBe(true); expect((guide as any).pendingAction).toBe(false);
@@ -231,8 +240,98 @@ describe('Results guide entry and readiness', () => {
   it('does not complete a failed import', async () => {
     const { guide, state, excel } = setup(); step(guide, 'result-viewer-reproduce', 'result'); state.lastExportedFile = {};
     excel.importFromExcel.mockRejectedValue(new Error('bad workbook'));
-    await (guide as any).simulateDropIntoResultViewer();
+    await (guide as any).importGuideResult();
     expect(guide.viewerLoaded).toBe(false); expect((guide as any).pendingAction).toBe(false);
+    expect(guide.guideImportError).toContain('could not be imported');
+  });
+
+  it('shows an empty viewer and never restores merely by clicking its navigation tab', () => {
+    const { guide, state, excel } = setup(); guide.startResultsGuide();
+    const preview = state.viewerSlot;
+    state.lastExportedFile = new File(['example'], 'guide.xlsx');
+    step(guide, 'result-viewer-reproduce', 'result');
+    (guide as any).handleStepSideEffects();
+    expect(state.newViewer).toHaveBeenCalledOnce(); expect(state.viewerSlot.genes).toEqual([]);
+    (guide as any).guardInteraction(event(['#guide-viewer-tab-btn']));
+    expect(excel.importFromExcel).not.toHaveBeenCalled(); expect(guide.viewerLoaded).toBe(false);
+    step(guide, 'result-export-report', 'result'); (guide as any).handleStepSideEffects();
+    expect(state.viewerSlot).toBe(preview);
+  });
+
+  it('imports an actual dropped report and only then acknowledges success', async () => {
+    const { guide, state, excel } = setup(); step(guide, 'result-viewer-reproduce', 'result');
+    const file = new File(['workbook'], 'example.xlsx');
+    excel.importFromExcel.mockResolvedValue({ scopes: [{ genes: [] }] });
+    const drop = event(['#guide-viewer-dropzone'], 'drop');
+    drop.dataTransfer = { getData: () => '', files: [file] };
+    (guide as any).guardInteraction(drop);
+    expect(drop.preventDefault).toHaveBeenCalled();
+    await Promise.resolve(); await Promise.resolve();
+    expect(excel.importFromExcel).toHaveBeenCalledWith(file); expect(guide.viewerLoaded).toBe(true);
+  });
+
+  it('keeps unrelated drop areas locked and supports select-then-drop on touch', async () => {
+    const { guide, state, excel } = setup(); step(guide, 'result-viewer-reproduce', 'result');
+    state.lastExportedFile = new File(['workbook'], 'guide.xlsx');
+    excel.importFromExcel.mockResolvedValue({ scopes: [{ genes: [] }] });
+    const elsewhere = event(['#guide-upload-zone'], 'drop');
+    (guide as any).guardInteraction(elsewhere);
+    expect(elsewhere.preventDefault).toHaveBeenCalled(); expect(excel.importFromExcel).not.toHaveBeenCalled();
+    const noFile = event(['#guide-viewer-dropzone']); (guide as any).guardInteraction(noFile);
+    expect(excel.importFromExcel).not.toHaveBeenCalled();
+    guide.armGuideReport(); (guide as any).guardInteraction(event(['#guide-viewer-dropzone']));
+    await Promise.resolve(); expect(excel.importFromExcel).toHaveBeenCalledWith(state.lastExportedFile);
+  });
+
+  it('does not advance benchmark until actual calculation has finished', () => {
+    const { guide, state } = setup(); guide.guideMode = 'benchmark';
+    guide.currentStepIndex = guide.benchmarkSteps.findIndex(s => s.id === 'benchmark-run');
+    state.benchmarkResult = null; expect(guide.isCurrentActionCompleted).toBe(false);
+    state.benchmarkResult = { total_reads: 24 }; state.benchIsLoading = true; expect(guide.isCurrentActionCompleted).toBe(false);
+    state.benchIsLoading = false; expect(guide.isCurrentActionCompleted).toBe(true);
+  });
+
+  it('keeps original benchmark inputs and results untouched after leaving the example', () => {
+    const { guide, state } = setup();
+    const rows = [{ geneName: 'My own experiment' }]; const result = { total_reads: 987 };
+    Object.assign(state, { benchRows: rows, benchmarkResult: result, benchWindow: 200, benchPhred: 30, benchIsLoading: false });
+    guide.startBenchmarkGuide();
+    expect(state.guideBenchmarkActive).toBe(true); expect(state.benchRows).toEqual([]);
+    expect(state.benchWindow).toBe(90);
+    guide.returnToHub();
+    expect(state.benchRows).toBe(rows); expect(state.benchmarkResult).toBe(result);
+    expect(state.benchWindow).toBe(200); expect(state.benchPhred).toBe(30); expect(state.guideBenchmarkActive).toBe(false);
+  });
+
+  it('does not replace an already-running benchmark', () => {
+    const { guide, state } = setup();
+    const rows = [{ geneName: 'Running experiment' }]; Object.assign(state, { benchRows: rows, benchIsLoading: true });
+    guide.startBenchmarkGuide(); expect(guide.benchmarkUnavailable).toBe(true);
+    expect(state.benchRows).toBe(rows); expect(state.guideBenchmarkActive).not.toBe(true);
+    expect(guide.isNextButtonEnabled).toBe(false);
+  });
+
+  it('marks the sibling benchmark page for refresh when asynchronous work completes', () => {
+    const { guide, state } = setup(); guide.ngOnInit();
+    guide.guideMode = 'benchmark'; guide.currentStepIndex = guide.benchmarkSteps.findIndex(s => s.id === 'benchmark-run');
+    state.benchmarkResult = { total_reads: 24 }; state.benchIsLoading = false;
+    state.benchmarkUpdated$.next();
+    expect(guide.requestTab.emit).toHaveBeenCalledWith('benchmark');
+    vi.advanceTimersByTime(60);
+    expect((guide as any).cdr.detectChanges).toHaveBeenCalled();
+    guide.ngOnDestroy();
+  });
+
+  it('accepts the draggable example token but not arbitrary source controls', async () => {
+    const { guide, state, excel } = setup(); step(guide, 'result-viewer-reproduce', 'result');
+    const file = new File(['workbook'], 'guide.xlsx'); state.lastExportedFile = file;
+    const setData = vi.fn(); guide.dragGuideReport({ dataTransfer: { setData }, preventDefault: vi.fn() } as any);
+    expect(setData).toHaveBeenCalledWith('application/x-casmango-guide-report', 'example');
+    excel.importFromExcel.mockResolvedValue({ scopes: [{ genes: [] }] });
+    const drop = event(['#guide-viewer-dropzone'], 'drop');
+    drop.dataTransfer = { files: [], getData: () => 'example' };
+    (guide as any).guardInteraction(drop); await Promise.resolve();
+    expect(excel.importFromExcel).toHaveBeenCalledWith(file);
   });
 
   it('does not accept a failed or unfinished export as a successful download', async () => {
@@ -247,7 +346,7 @@ describe('Results guide entry and readiness', () => {
   it('discards an import that resolves after leaving and re-entering the same step', async () => {
     const { guide, state, excel } = setup(); step(guide, 'result-viewer-reproduce', 'result'); state.lastExportedFile = {};
     let resolve!: (data: any) => void; excel.importFromExcel.mockReturnValue(new Promise(r => resolve = r));
-    const task = (guide as any).simulateDropIntoResultViewer();
+    const task = (guide as any).importGuideResult();
     guide.returnToHub(); step(guide, 'result-viewer-reproduce', 'result');
     resolve({ scopes: [{ genes: [] }] }); await task;
     expect(state.loadResultData).not.toHaveBeenCalled(); expect(guide.viewerLoaded).toBe(false);
