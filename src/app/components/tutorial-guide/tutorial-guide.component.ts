@@ -1522,7 +1522,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'result-figure-homeo', stageName: 'Optional Figures', headline: 'Explore the figure workspace',
-      textLines: ['Choose sources, add panels (including Co-editing for Homeolog combinations), and adjust Zoom or Fit width. On a small screen, switch between Setup and Figure.'],
+      textLines: ['Start with an empty figure. Add individual panels or All 4 / All 5 from the selected source. Choose Auto or a custom Layout; adjust zoom at the bottom right.'],
       targetSelector: '#guide-figure-btn', nextButtonText: 'Next: Export reports ▶'
     },
 

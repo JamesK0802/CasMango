@@ -80,7 +80,31 @@ export function homeologCombination(rows: ComparisonRow[], metric: 'edited' | 'i
 }
 export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary' | 'coediting';
 export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; }
-export interface FigureOptions { title: string; columns: number; fontSize: number; radius: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }
+export interface FigureOptions { title: string; columns: number; layout?: string; fontSize: number; radius: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }
+
+export function figureRows(count: number, options: Pick<FigureOptions, 'columns' | 'layout'>): number[] {
+  const n = Math.max(0, Math.min(12, Math.floor(count)));
+  if (!n) return [];
+  if (options.layout?.startsWith('rows:')) {
+    const rows = options.layout.slice(5).split('+').map(Number);
+    if (rows.every(value => Number.isInteger(value) && value >= 1 && value <= 4) && rows.reduce((sum,value)=>sum+value,0) === n) return rows;
+  }
+  const requested = options.layout?.startsWith('columns:') ? Number(options.layout.slice(8)) : !options.layout ? options.columns : 0;
+  if (Number.isInteger(requested) && requested >= 1 && requested <= 4) {
+    const rows: number[] = []; for (let left=n;left>0;left-=requested) rows.push(Math.min(left,requested)); return rows;
+  }
+  return [[],[1],[2],[3],[2,2],[3,2],[3,3],[4,3],[4,4],[3,3,3],[4,3,3],[4,4,3],[4,4,4]][n];
+}
+
+export function figureRowChoices(count: number): string[] {
+  const choices: string[] = [];
+  const visit = (left:number, max:number, rows:number[]) => {
+    if (!left) { choices.push('rows:'+rows.join('+')); return; }
+    for(let value=Math.min(left,max,4);value>=1;value--) visit(left-value,value,[...rows,value]);
+  };
+  if(count>0 && count<=12) visit(count,4,[]);
+  return choices;
+}
 export const FIGURE_COLORS = {
   okabe: ['#009E73', '#CC79A7', '#0072B2', '#E69F00'],
   muted: ['#648984', '#A07798', '#567EA3', '#C29146']
@@ -123,12 +147,13 @@ export function sequenceCells(target: TargetResult, groupIndex: number, radius: 
 
 /** Standalone SVG (no DOM screenshots, HTML, external fonts, or scripts). */
 export function renderFigure(panels: FigurePanel[], input: FigureOptions): string {
-  const options = { ...input, columns: Math.max(1, Math.min(2, input.columns)),
+  const options = { ...input,
     fontSize: Math.max(10, Math.min(22, input.fontSize)), radius: Math.max(10, Math.min(60, input.radius)),
     groupLimit: Math.max(1, Math.min(12, input.groupLimit)), minFrequency: pct(input.minFrequency) };
   const colors = FIGURE_COLORS[options.palette] ?? FIGURE_COLORS.okabe;
-  const width = options.columns === 2 ? 1440 : 780, gap = 24, margin = 28;
-  const panelWidth = (width - margin * 2 - gap * (options.columns - 1)) / options.columns;
+  const rows = figureRows(panels.length, options);
+  const fixedColumns = options.layout?.startsWith('columns:') ? Number(options.layout.slice(8)) : !options.layout ? options.columns : 0;
+  const width = Math.max(...rows, fixedColumns || 1) > 1 ? 1440 : 780, gap = 24, margin = 28;
   const font = options.fontSize;
   const text = (x: number, y: number, content: unknown, size = font, extra = '') => `<text x="${x}" y="${y}" font-size="${size}" ${extra}>${escapeSvg(content)}</text>`;
   const legend = colors.map((color, i) => `<rect x="${margin + i * 155}" y="65" width="11" height="11" fill="${color}"/>${text(margin + 17 + i * 155, 75, ['WT', 'Substitution', 'In-frame indel', 'Out-of-frame indel'][i], 12)}`).join('');
@@ -136,14 +161,23 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
     ? 90 + panel.source.rows.reduce((height, row) => height + 56 + Math.min(options.groupLimit, (row.target?.top_groups ?? []).filter(g => g.read_pct >= options.minFrequency).length) * 30, 0)
     : 112 + panel.source.rows.length * (panel.kind === 'summary' ? 38 : 56);
   const heights: number[] = [];
-  panels.forEach((p, i) => { const r = Math.floor(i / options.columns); heights[r] = Math.max(heights[r] || 0, panelHeight(p)); });
+  const positions: {row:number;col:number;columns:number}[] = [];
+  let panelIndex = 0;
+  rows.forEach((columns,row) => {
+    for(let col=0;col<columns;col++) {
+      positions.push({row,col,columns:fixedColumns >= 1 && fixedColumns <= 4 ? fixedColumns : columns});
+      heights[row] = Math.max(heights[row] || 0, panelHeight(panels[panelIndex++]));
+    }
+  });
   let body = ''; let y = 108;
   panels.forEach((panel, index) => {
-    const col = index % options.columns;
-    if (col === 0 && index > 0) y += heights[Math.floor(index / options.columns) - 1] + gap;
+    const {row,col,columns} = positions[index];
+    const panelWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
+    const font = Math.max(10, Math.min(options.fontSize, panelWidth / 30));
+    if (col === 0 && index > 0) y += heights[row - 1] + gap;
     const x = margin + col * (panelWidth + gap), inner = panelWidth - 40;
-    body += `<g transform="translate(${x},${y})">`;
-    body += text(0, 22, `${String.fromCharCode(97 + index)}  ${short(panel.title, 58)}`, font + 3, 'font-weight="700"');
+    body += `<g data-figure-panel="${index}" data-row="${row}" data-column="${col}" transform="translate(${x},${y})">`;
+    body += text(0, 22, `${String.fromCharCode(97 + index)}  ${short(panel.title, Math.floor(panelWidth / ((font + 3) * .65)) - 4)}`, font + 3, 'font-weight="700"');
     body += text(0, 44, short(panel.source.label, Math.floor(panelWidth / 7)), 11, 'fill="#64748b"');
     if (panel.kind === 'profile' || panel.kind === 'editing') {
       const barX = 112, barWidth = inner - barX - 48;
@@ -183,7 +217,7 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
       ['Reference', 'Reads', 'WT', 'In-frame', 'Out-of-frame'].forEach((v, j) => body += text(columns[j], 76, v, 12, 'font-weight="600"'));
       panel.source.rows.forEach((row, i) => {
         const top = 108 + i * 38;
-        [short(row.name, 18), row.reads, fmt(row.wt), fmt(row.inFrame), fmt(row.outOfFrame)].forEach((v, j) => body += text(columns[j], top, v, font));
+        [short(row.name, Math.min(18,Math.floor(inner * .26 / (font * .65)))), row.reads, fmt(row.wt), fmt(row.inFrame), fmt(row.outOfFrame)].forEach((v, j) => body += text(columns[j], top, v, font));
         body += `<path d="M0 ${top + 12}H${inner}" stroke="#e2e8f0"/>`;
       });
     } else {

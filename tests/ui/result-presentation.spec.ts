@@ -1,6 +1,6 @@
 import '@angular/compiler';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { comparisonRows, comparisonSummary, homeologCombination, captureFigureSource, renderFigure, sequenceCells, moveFigurePanel, FigureOptions, withoutExcludedGroups } from '../../src/app/components/result-dashboard/result-presentation';
+import { comparisonRows, comparisonSummary, homeologCombination, captureFigureSource, renderFigure, sequenceCells, moveFigurePanel, FigureOptions, withoutExcludedGroups, figureRows, figureRowChoices } from '../../src/app/components/result-dashboard/result-presentation';
 import { groupKey } from '../../src/app/models/curation.model';
 import { HomoeologComparisonComponent } from '../../src/app/components/result-dashboard/homoeolog-comparison.component';
 import { FigureComposerComponent } from '../../src/app/components/result-dashboard/figure-composer.component';
@@ -149,8 +149,8 @@ describe('figure snapshots and publication SVG', () => {
     const composer = new FigureComposerComponent({bypassSecurityTrustHtml: (v: string) => v} as any, {detectChanges:vi.fn()} as any);
     composer.source = source(); composer.addPanel(); composer.source = {label:'Another result', rows:[]}; composer.ngOnChanges();
     expect(composer.panels).toHaveLength(1); expect(composer.panels[0].source.label).toBe('Sample 1 · t1');
-    composer.options.columns = 2; composer.refresh(); expect(composer.svg).toContain('width="1440"');
-    composer.options.columns = 1; composer.refresh(); expect(composer.svg).toContain('width="780"');
+    composer.options.layout = 'columns:2'; composer.refresh(); expect(composer.svg).toContain('width="1440"');
+    composer.options.layout = 'columns:1'; composer.refresh(); expect(composer.svg).toContain('width="780"');
   });
   it('clamps invalid editor values and limits panel count', () => {
     const composer = new FigureComposerComponent({bypassSecurityTrustHtml: (v: string) => v} as any, {detectChanges:vi.fn()} as any); composer.source = source();
@@ -167,18 +167,48 @@ describe('figure source selection and initial panels', () => {
     composer.downloadSvg(); await composer.downloadPng();
     expect(save).not.toHaveBeenCalled(); expect(composer.exportPreviewMessage).toContain('no file downloaded');
   });
-  it('seeds four panels once, preserves deletions and mixes reference/combination snapshots', () => {
+  it('starts empty, adds All 4 on request and preserves deletions and mixed snapshots', () => {
     const composer = new FigureComposerComponent({bypassSecurityTrustHtml: (v: string) => v} as any, {detectChanges:vi.fn()} as any);
     composer.genes = [gene('7A'), gene('7D')]; composer.source = source(); composer.active = true;
     composer.ngOnChanges();
+    expect(composer.panels).toEqual([]);
+    composer.sourceChoice = 'ref:7A'; composer.chooseSource();
+    composer.kind = 'all'; composer.addPanel();
     expect(composer.panels.map(p => p.kind)).toEqual(['profile', 'editing', 'alleles', 'summary']);
     const original = structuredClone(composer.panels);
-    composer.sourceChoice = 'ref:7D'; composer.chooseSource(); composer.addPanel();
+    composer.sourceChoice = 'ref:7D'; composer.chooseSource(); composer.kind = 'profile'; composer.addPanel();
     expect(composer.panels[4].source.rows.map(r => r.name)).toEqual(['7D']);
     expect(composer.panels.slice(0, 4)).toEqual(original);
     composer.remove(0); composer.ngOnChanges(); expect(composer.panels).toHaveLength(4);
     composer.sourceChoice = 'homeo'; composer.selectedRefs = ['7A', '7D']; composer.chooseSource(); composer.addPanel();
     expect(composer.panels[4].source.rows).toHaveLength(2);
+  });
+  it('adds All 5 atomically for Homeolog sources and respects the 12-panel cap', () => {
+    const composer = new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v} as any,{detectChanges:vi.fn()} as any);
+    composer.genes = [gene('7A'),gene('7D')]; composer.source = source(); composer.active = true; composer.ngOnChanges();
+    composer.kind = 'all'; composer.addPanel();
+    expect(composer.panels.map(p=>p.kind)).toEqual(['profile','editing','alleles','summary','coediting']);
+    composer.addPanel(); expect(composer.panels).toHaveLength(10);
+    expect(composer.canAddPanels).toBe(false); composer.addPanel(); expect(composer.panels).toHaveLength(10);
+    composer.kind = 'profile'; composer.addPanel(); composer.addPanel(); expect(composer.panels).toHaveLength(12);
+  });
+});
+
+describe('automatic and custom Figure rows', () => {
+  it.each([[4,[2,2]],[5,[3,2]],[6,[3,3]],[7,[4,3]],[8,[4,4]],[9,[3,3,3]],[10,[4,3,3]],[11,[4,4,3]],[12,[4,4,4]]] as const)('balances %s panels without singleton rows', (count,expected) => {
+    expect(figureRows(count,{columns:0,layout:'auto'})).toEqual(expected);
+    const panels = Array.from({length:count},(_,i)=>({id:i,kind:'profile' as const,title:'Panel',source:source()}));
+    const svg = renderFigure(panels,{...options,layout:'auto'});
+    const actual = [...svg.matchAll(/data-row="(\d+)"/g)].map(m=>Number(m[1]));
+    expect(expected.map((_,row)=>actual.filter(value=>value===row).length)).toEqual(expected);
+    expect(svg).not.toMatch(/NaN|undefined/);
+  });
+  it('permits explicit rows and fixed columns, falling back safely for stale row choices', () => {
+    expect(figureRows(5,{columns:0,layout:'rows:2+2+1'})).toEqual([2,2,1]);
+    expect(figureRows(5,{columns:0,layout:'columns:2'})).toEqual([2,2,1]);
+    expect(figureRows(5,{columns:0,layout:'rows:4+4'})).toEqual([3,2]);
+    expect(figureRowChoices(5)).toContain('rows:3+2'); expect(figureRowChoices(12)).toContain('rows:4+4+4');
+    expect(figureRows(0,{columns:0})).toEqual([]);
   });
 });
 
