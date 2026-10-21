@@ -102,6 +102,8 @@ export interface FastqDocument {
   updatedTimestamp: number;
   fileHandle?: any;
   autoAlign?: AutoAlignConfig;
+  /** Fill alignment controls without automatically running an alignment. */
+  alignmentPreset?: AutoAlignConfig;
 }
 
 export type ProjectItem = SequenceDocument | AlignmentDocument | FastqDocument;

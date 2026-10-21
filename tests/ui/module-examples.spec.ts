@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { benchmarkExampleRows, GUIDE_GRNA, GUIDE_REFERENCE, normalizationExampleMates, workspaceExampleItems } from '../../src/app/components/tutorial-guide/module-examples';
+import { benchmarkExampleRows, GUIDE_GRNA, GUIDE_REFERENCE, normalizationExampleMates, workspaceExampleItems, workspaceExampleFile } from '../../src/app/components/tutorial-guide/module-examples';
 import { parseFastqString } from '../../src/app/workers/core/fastq-parser';
 import { runBenchmark } from '../../src/app/workers/core/benchmark-pipeline';
 import { normalizeIlluminaPairByOverlap, buildIlluminaPseudoReads } from '../../src/app/workers/core/illumina-preprocessor';
 import { reverseComplement, findGrnaCutSite } from '../../src/app/workers/core/classifier';
 
 describe('real tutorial input fixtures', () => {
+  it('imports the guide FASTQ through the ordinary parser', async () => {
+    const { parseFastqFile } = await import('../../src/app/utils/parsers.utils');
+    const doc = await parseFastqFile(workspaceExampleFile());
+    expect(doc.reads.map(r => r.id)).toEqual(['WT', 'Deletion_1bp', 'Insertion_1bp']);
+    expect(doc.stats.readCount).toBe(3);
+    expect(doc.autoAlign).toBeUndefined();
+  });
   it('runs labelled examples through the real classifier rather than hardcoding metrics', async () => {
     const rows = benchmarkExampleRows();
     const dataset = await Promise.all(rows.map(async row => ({ gene: row.geneName, target: row.targetName,

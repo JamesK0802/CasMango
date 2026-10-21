@@ -68,7 +68,8 @@ function buildMotifRegex(query: string): RegExp | null {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="fastq-viewer" (scroll)="onViewerScroll($event)">
+    <div id="guide-workspace-reads" [attr.data-aligned]="isAlignedActive"
+      [attr.data-guide-search-complete]="isAlignedActive && searchQuery.trim().toLowerCase() === 'deletion' && filteredReads.length === 1" class="fastq-viewer" (scroll)="onViewerScroll($event)">
       <div class="reads-panel">
         
         <!-- Compact Top Workspace Bar -->
@@ -95,12 +96,12 @@ function buildMotifRegex(query: string): RegExp | null {
           </div>
 
           <div class="top-bar-right">
-            <div class="search-box">
+            <div id="guide-workspace-search" class="search-box">
               <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="searchReads()" (keyup.enter)="searchReads()" placeholder="Search ID or motif (e.g. NGG)...">
               <button (click)="searchReads()">Search</button>
               <button (click)="clearSearch()" *ngIf="searchQuery">Clear</button>
             </div>
-            <button type="button" class="btn-align-toggle" [class.active]="showAlignPanel" (click)="toggleAlignPanel()">
+            <button id="guide-workspace-align-toggle" type="button" class="btn-align-toggle" [class.active]="showAlignPanel" (click)="toggleAlignPanel()">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="10" x2="3" y2="10"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
               Align Controls {{ isAlignedActive ? '(Active)' : '' }}
             </button>
@@ -108,7 +109,7 @@ function buildMotifRegex(query: string): RegExp | null {
         </div>
 
         <!-- Align Config Panel -->
-        <div class="align-config-panel" *ngIf="showAlignPanel">
+        <div id="guide-workspace-align-config" class="align-config-panel" *ngIf="showAlignPanel">
           <div class="align-mode-tabs">
             <button type="button" class="mode-tab-btn" [class.active]="alignMode === 'window'" (click)="alignMode = 'window'">
               Option A: Window Sequence Direct Input
@@ -145,7 +146,7 @@ function buildMotifRegex(query: string): RegExp | null {
           </div>
 
           <div class="align-panel-actions">
-            <button type="button" class="btn-run-align" (click)="runAlign()">Run Alignment & Center Cut Sites</button>
+            <button id="guide-workspace-run-align" type="button" class="btn-run-align" (click)="runAlign()">Run Alignment & Center Cut Sites</button>
             <button type="button" class="btn-reset-align" (click)="resetAlign()" *ngIf="isAlignedActive">Reset Alignment</button>
           </div>
         </div>
@@ -923,6 +924,14 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
         this.alignmentReadOrder = 'aligned';
         this.alignedWindowSeq = '';
         this.alignedCutSiteInWindow = -1;
+        const preset = this.document?.alignmentPreset;
+        if (preset) {
+          this.inputWindowSeq = preset.windowSeq || '';
+          this.inputRefSeq = preset.refSeq || '';
+          this.inputGrnaSeq = preset.grnaSeq || '';
+          this.inputWinSize = preset.winSize || 90;
+          this.alignMode = 'window';
+        }
       }
     }
 

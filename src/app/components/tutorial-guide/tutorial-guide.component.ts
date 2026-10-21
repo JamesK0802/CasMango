@@ -8,7 +8,8 @@ import { ExcelExportService } from '../../services/excel-export.service';
 import { addTryExample } from './guide-demo';
 import { GUIDE_MASCOT_ASSETS, guideMascotPose, GuideMascotPose } from './guide-mascot';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
-import { workspaceExampleItems } from './module-examples';
+import { parseFastqFile } from '../../utils/parsers.utils';
+import { workspaceExampleFile, workspaceExampleItems } from './module-examples';
 
 export interface AdvantageCard {
   title: string;
@@ -33,7 +34,7 @@ export interface GuideStep {
   isPrereq?: boolean;
   isFinal?: boolean;
   nextButtonText?: string;
-  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer' | 'workspace_map' | 'workspace_features' | 'workspace_reads' | 'bench_load' | 'bench_run' | 'bench_normalization' | 'bench_mates' | 'bench_normalize' | 'homeo_open' | 'homeo_select' | 'figure_homeo' | 'figure_both';
+  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer' | 'workspace_align' | 'workspace_search' | 'workspace_reads' | 'bench_load' | 'bench_run' | 'bench_normalization' | 'bench_mates' | 'bench_normalize' | 'homeo_open' | 'homeo_select' | 'figure_homeo' | 'figure_both';
   actionPromptText?: string;
   actionSuccessText?: string;
 }
@@ -43,7 +44,7 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.no-target]="!targetRect" tabindex="-1">
+    <div class="guide-root" [class.workspace-tour]="guideMode === 'workspace' || (currentStep.id === 'window-check' && windowCheckOpened)" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
@@ -195,14 +196,6 @@ export interface GuideStep {
             </div>
           </div>
 
-          <div *ngIf="currentStep.id === 'result-viewer-reproduce' && !viewerLoaded" class="guide-report-file">
-            <div role="button" tabindex="0" draggable="true" (dragstart)="dragGuideReport($event)" (click)="armGuideReport()"
-                    (keydown.enter)="armGuideReport()" (keydown.space)="$event.preventDefault(); armGuideReport()"
-                    [attr.aria-pressed]="reportArmed" aria-label="Drag the exported example report to the empty Result Viewer, or select it then click the drop zone">
-              📄 {{ state.lastExportedFile?.name || 'Export the example report first' }}
-            </div>
-            <small>{{ reportArmed ? 'Example selected — now click the empty drop zone.' : 'Drag this file into the highlighted empty drop zone. On touch devices, select it and then tap the drop zone.' }}</small>
-          </div>
           <p *ngIf="guideImportError" class="guide-import-error" role="alert">{{ guideImportError }}</p>
 
           <!-- Footer Actions -->
@@ -425,6 +418,21 @@ export interface GuideStep {
       max-width: 90vw;
       animation: dialogPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     }
+
+    .workspace-tour .guide-dialog-wrapper,
+    .workspace-tour .guide-dialog-wrapper.is-centered {
+      position: fixed; top: auto !important; bottom: 12px; left: 16px !important;
+      width: calc(100% - 32px) !important; max-width: none; margin: 0; gap: 10px;
+      max-height: 188px; overflow-y: auto;
+    }
+    .workspace-tour .mascot-col { width: 60px; min-width: 60px; }
+    .workspace-tour .mascot-avatar-frame { width: 60px; height: 72px; }
+    .workspace-tour .bubble-content { padding: 12px 16px; }
+    .workspace-tour .bubble-headline { font-size: 17px; margin-bottom: 6px; }
+    .workspace-tour .text-line { margin: 4px 0; }
+    .workspace-tour .guide-dialog-wrapper { flex-direction: row; }
+    .workspace-tour .bubble-footer { margin-top: 8px; padding-top: 8px; }
+    .workspace-tour .arrow-svg-layer { display: none; }
 
     .guide-dialog-wrapper.is-centered {
       position: relative;
@@ -1158,7 +1166,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       targetSelector: '#guide-window-check-btn',
       interactiveAction: 'open_window_check',
       actionPromptText: 'Click Window Check to view comparison and proceed',
-      actionSuccessText: 'Window Check opened! Click Next to continue.',
+      actionSuccessText: 'Adjust the window or click a similarity cell to compare the sequences.',
       nextButtonText: 'Next ▶'
     },
 
@@ -1226,7 +1234,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         {
           badge: 'Tour 3',
           title: 'Sequence Viewer',
-          desc: 'Multi-sequence alignment workspace, tree hierarchy, linear map, sequence tracks, and PAM visualization controls.'
+          desc: 'Load FASTQ reads from Results or Benchmark, align them, and search by read ID or motif.'
         },
         {
           badge: 'Tour 4',
@@ -1240,99 +1248,32 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   workspaceSteps: GuideStep[] = [
     {
-      id: 'workspace-overview',
-      stageName: 'Sequence Viewer',
-      headline: 'Sequence Workspace Overview',
-      introLine: 'Explore a temporary annotated CPC reference and three synthetic reads: WT, −1 bp and +1 bp. Your own saved sequences are restored when you leave this tour.',
-      cards: [
-        {
-          badge: 'Explorer',
-          title: 'Project Tree',
-          desc: 'Organize amplicons, plasmids, Sanger reads, and NGS FASTQ files in hierarchical folders.'
-        },
-        {
-          badge: 'Visualization',
-          title: 'Linear & Plasmid Maps',
-          desc: 'Interactive high-density sequence tracks with gRNA PAM markers and translation frames.'
-        },
-        {
-          badge: 'Inspector',
-          title: 'Feature Inspector',
-          desc: 'Inspect sequence properties, GC content, annotations, and export curated sub-sequences.'
-        }
-      ],
-      nextButtonText: 'Next: Project Explorer ▶',
-      isIntro: true
+      id: 'workspace-reads', stageName: 'Load FASTQ', headline: 'A workspace for your FASTQ reads',
+      textLines: ['Open FASTQ files exported from Results or Benchmark here. Click IMPORT to load three example reads: WT, −1 bp and +1 bp. Your saved workspace will be restored when you leave.'],
+      targetSelector: '#guide-workspace-import', interactiveAction: 'workspace_reads',
+      actionPromptText: 'Click IMPORT to load the example FASTQ',
+      actionSuccessText: 'FASTQ loaded. Next, align the reads.',
+      nextButtonText: 'Next: Align ▶'
     },
     {
-      id: 'workspace-explorer',
-      stageName: 'Project Explorer',
-      headline: 'Project Explorer & File Hierarchy',
-      textLines: [
-        'The example contains an annotated CPC reference and a FASTQ document with three synthetic reads. This temporary workspace is separate from your saved items.'
-      ],
-      targetSelector: '#guide-workspace-explorer',
-      nextButtonText: 'Next: Main Alignment Viewer ▶'
+      id: 'workspace-align', stageName: 'Align reads', headline: 'Align against a reference window',
+      textLines: ['The example reference window is filled in. Click Run Alignment to compare all three reads around the cut site. For your own files, paste a window or supply a reference and gRNA.'],
+      targetSelector: '#guide-workspace-align-config', interactiveAction: 'workspace_align',
+      actionPromptText: 'Click Run Alignment & Center Cut Sites',
+      actionSuccessText: 'Alignment complete: inspect the WT, deletion and insertion in the workspace.',
+      nextButtonText: 'Next: Search ▶'
     },
     {
-      id: 'workspace-viewer',
-      stageName: 'Main Viewer',
-      headline: 'Interactive Sequence Alignment & Maps',
-      textLines: [
-        '• Zoom and pan across base pairs with single-nucleotide clarity.',
-        '• Toggle between linear map, circular plasmid map, and multi-read pairwise alignment views.'
-      ],
-      targetSelector: '#guide-workspace-viewer',
-      nextButtonText: 'Next: Open the Map ▶'
+      id: 'workspace-search', stageName: 'Search reads', headline: 'Find a read by ID or sequence',
+      textLines: ['Type Deletion into the search field to find the −1 bp read. You can also search by sequence motif.'],
+      targetSelector: '#guide-workspace-search', interactiveAction: 'workspace_search',
+      actionPromptText: 'Search for Deletion',
+      actionSuccessText: 'The deletion read is isolated; its alignment remains visible.',
+      nextButtonText: 'Finish ▶'
     },
     {
-      id: 'workspace-map', stageName: 'Try the Map', headline: 'Open the annotated reference map',
-      textLines: ['Click Map to see the gRNA target and PAM on the CPC reference. The sequence and map are views of the same example document.'],
-      targetSelector: '#guide-workspace-map-btn', interactiveAction: 'workspace_map',
-      actionPromptText: 'Click Map above the sequence', actionSuccessText: 'Map opened. The target and PAM remain attached to the reference.',
-      nextButtonText: 'Next: Feature Table ▶'
-    },
-    {
-      id: 'workspace-features', stageName: 'Try Features', headline: 'Inspect the annotated features',
-      textLines: ['Click Features to review the target and PAM coordinates. These are synthetic tutorial annotations, not an experimental result.'],
-      targetSelector: '#guide-workspace-features-btn', interactiveAction: 'workspace_features',
-      actionPromptText: 'Click Features', actionSuccessText: 'Feature table opened.', nextButtonText: 'Next: Feature Inspector ▶'
-    },
-    {
-      id: 'workspace-inspector',
-      stageName: 'Inspector',
-      headline: 'Item Inspector & Properties',
-      textLines: [
-        '• Inspect base composition, GC percentage, translations, and feature annotations.',
-        '• Edit features or export clean FASTA sequences directly.'
-      ],
-      targetSelector: '#guide-workspace-inspector',
-      nextButtonText: 'Next: Example FASTQ Reads ▶'
-    },
-    {
-      id: 'workspace-reads', stageName: 'Example Reads', headline: 'Open the WT and edited read example',
-      textLines: ['Select “Guide · WT and edited reads.fastq” in the explorer. The FASTQ viewer contains WT, −1 bp and +1 bp reads and a preconfigured 90-bp reference window.'],
-      targetSelector: '#guide-workspace-explorer', interactiveAction: 'workspace_reads',
-      actionPromptText: 'Click the example FASTQ file name', actionSuccessText: 'Example FASTQ opened. The reads and quality information are ready to inspect.',
-      nextButtonText: 'Next: Read Viewer ▶'
-    },
-    {
-      id: 'workspace-read-view', stageName: 'Read Viewer', headline: 'Read quality and alignment workspace',
-      textLines: ['The example contains three Q40 synthetic reads. In your own workspace, use its filtering and alignment controls to inspect reads against the supplied reference. This explanation is read-only.'],
-      targetSelector: '#guide-workspace-viewer', nextButtonText: 'Finish Sequence Viewer Tour ▶'
-    },
-    {
-      id: 'workspace-final',
-      stageName: 'Workspace Complete',
-      headline: 'Sequence Workspace Tour Complete!',
-      introLine: 'You can return to the Guide Hub anytime or proceed to explore the Benchmark module next.',
-      cards: [
-        {
-          badge: 'Next Step',
-          title: 'Explore Benchmark',
-          desc: 'Verify classification accuracy and Illumina paired-end normalization.'
-        }
-      ],
+      id: 'workspace-final', stageName: 'Workspace Complete', headline: 'Load → align → search',
+      textLines: ['Use this workspace to inspect FASTQ reads from Results or Benchmark. Exit the guide to return to your own files.'],
       isFinal: true
     }
   ];
@@ -1635,11 +1576,11 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Result Viewer',
       headline: 'Reproduce Results in Result Viewer',
       textLines: [
-        'The Result Viewer is now empty. Drag the exported example file below into its highlighted drop zone to restore the dashboard. Switching tabs alone does not load anything.'
+        'Click the highlighted empty drop zone to restore the exported example report. Outside the guide, click or drop your own Excel report here.'
       ],
       targetSelector: '#guide-viewer-dropzone',
       interactiveAction: 'switch_to_viewer',
-      actionPromptText: 'Drop the exported .xlsx file into the empty Result Viewer',
+      actionPromptText: 'Click the empty drop zone',
       actionSuccessText: 'Result loaded into Result Viewer! Complete dashboard restored.',
       nextButtonText: 'Next: Sequence Viewer Guide ▶'
     },
@@ -1652,7 +1593,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         {
           badge: 'Next Guide',
           title: 'Sequence Viewer Guide',
-          desc: 'Explore the full multi-sequence alignment workspace and plasmid viewer.'
+          desc: 'Load, align and search FASTQ reads.'
         },
         {
           badge: 'Next Guide',
@@ -1713,7 +1654,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (step.id === 'result-figure-homeo' && document.querySelector('#guide-homeo-figure[aria-pressed="true"]')) return '#guide-add-homeo-panel';
     if (step.id === 'result-figure-both' && document.querySelector('#guide-standard-figure[aria-pressed="true"]')) return '#guide-add-standard-panel';
     if (step.id === 'result-viewer-reproduce' && this.viewerLoaded) return '#resultsSection';
-    if (['workspace-map', 'workspace-features', 'workspace-reads'].includes(step.id) && this.isCurrentActionCompleted) return '#guide-workspace-viewer';
+    if (['workspace-align', 'workspace-reads'].includes(step.id) && this.isCurrentActionCompleted) return '#guide-workspace-viewer';
     if (step.id === 'benchmark-run' && this.isCurrentActionCompleted) return '#guide-bench-results';
     if (step.id === 'benchmark-normalization-mode' && this.isCurrentActionCompleted) return '#guide-bench-normalization-params';
     if (step.id === 'benchmark-normalize' && this.isCurrentActionCompleted) return '#guide-bench-normalization-results';
@@ -1723,7 +1664,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       return '#guide-upload-section';
     }
     if (step.id === 'window-check' && this.windowCheckOpened) {
-      return '#guide-window-check-panel';
+      return document.querySelector('#guide-pair-comparison') ? '#guide-pair-comparison' : '#guide-window-check-panel';
     }
     return step.targetSelector;
   }
@@ -1755,9 +1696,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         return this.exportTested || this.state.lastExportedFile !== null;
       case 'switch_to_viewer':
         return this.viewerLoaded;
-      case 'workspace_map': return !!document.querySelector('#guide-workspace-map-btn[aria-pressed="true"]');
-      case 'workspace_features': return !!document.querySelector('#guide-workspace-features-btn[aria-pressed="true"]');
-      case 'workspace_reads': return this.workspace?.getSelectedItem()?.id === 'guide-cpc-reads';
+      case 'workspace_align': return !!document.querySelector('#guide-workspace-reads[data-aligned="true"]');
+      case 'workspace_search': return !!document.querySelector('#guide-workspace-reads[data-guide-search-complete="true"]');
+      case 'workspace_reads': return this.workspace?.getSelectedItem()?.type === 'fastq';
       case 'bench_load': return !!this.state.benchRows?.length && this.state.benchRows.every(r => r.file?.name.startsWith('guide_'));
       case 'bench_run': return !!this.state.benchmarkResult && !this.state.benchIsLoading;
       case 'bench_normalization': return !!document.querySelector('#guide-bench-normalization-params');
@@ -1835,7 +1776,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'file-upload': return this.demoFilesLoaded ? [] : ['#guide-upload-zone'];
       case 'ref-configuration-actions': return ['#guide-autofill-btn'];
       case 'autofill-panel': return this.demoTargetsLoaded ? [] : ['#guide-autofill-upload-btn'];
-      case 'window-check': return this.windowCheckOpened ? [] : ['#guide-window-check-btn'];
+      case 'window-check': return this.windowCheckOpened
+        ? ['#guide-window-check-panel input', '#guide-window-check-panel .similarity-table td',
+           '#guide-pair-comparison .btn-close-comparison', '#guide-pair-comparison .alignment-box']
+        : ['#guide-window-check-btn'];
       case 'result-references': return ['.gene-tab-btn[data-curation-key="TRY"]'];
       case 'result-homeo-open': return this.isCurrentActionCompleted ? [] : ['#guide-open-homeo'];
       case 'result-homeo-select': return this.isCurrentActionCompleted ? [] : ['#guide-homeo-second-reference'];
@@ -1845,10 +1789,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'result-exclude-group': return this.excludedExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-restore-group': return this.restoredExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-export-report': return this.exportTested ? [] : [this.state.isCuratedView ? '#guide-export-curated-btn' : '#guide-export-excel-btn'];
-      case 'result-viewer-reproduce': return this.viewerLoaded || !this.reportArmed ? [] : ['#guide-viewer-dropzone'];
-      case 'workspace-map': return ['#guide-workspace-map-btn'];
-      case 'workspace-features': return ['#guide-workspace-features-btn'];
-      case 'workspace-reads': return ['[data-guide-item-id="guide-cpc-reads"]'];
+      case 'result-viewer-reproduce': return this.viewerLoaded ? [] : ['#guide-viewer-dropzone'];
+      case 'workspace-reads': return this.isCurrentActionCompleted ? [] : ['#guide-workspace-import'];
+      case 'workspace-align': return this.isCurrentActionCompleted ? [] : ['#guide-workspace-run-align'];
+      case 'workspace-search': return ['#guide-workspace-search input', '#guide-workspace-search button'];
       case 'benchmark-dataset': return this.isCurrentActionCompleted ? [] : ['#guide-bench-load-classes'];
       case 'benchmark-run': return this.isCurrentActionCompleted ? [] : ['#guide-bench-run'];
       case 'benchmark-normalization-mode': return ['#guide-bench-normalization-btn'];
@@ -1949,6 +1893,18 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.currentStep.id === 'workspace-reads' && target.closest('#guide-workspace-import')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      void this.loadWorkspaceExample();
+      return;
+    }
+    if (this.currentStep.id === 'window-check' && target.closest('.similarity-table td, #guide-pair-comparison .btn-close-comparison')) {
+      this.later(() => {
+        document.querySelector('#guide-pair-comparison')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        this.updateLayoutInstant();
+      }, 100);
+    }
+
     // 1. Step: Analysis Tabs - user clicks (+) button
     if (this.currentStep.id === 'analysis-tabs') {
       if (target.closest('#guide-add-tab-btn')) {
@@ -1995,6 +1951,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         this.windowCheckOpened = true;
         this.cdr.detectChanges();
         this.later(() => {
+          document.querySelector('#guide-window-check-panel')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
           this.updateLayoutInstant();
         }, 200);
       }
@@ -2019,15 +1976,18 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       }
     }
 
-    // 8. Restore only after a drop (or the accessible select-then-drop fallback).
+    // Restore the exported guide example with one drop-zone click.
     if (this.currentStep.id === 'result-viewer-reproduce') {
-      if (target.closest('#guide-viewer-dropzone') && this.reportArmed) {
+      if (target.closest('#guide-viewer-dropzone')) {
         event.preventDefault(); event.stopImmediatePropagation();
         void this.importGuideResult();
       }
     }
-    if (['workspace-map', 'workspace-features', 'workspace-reads', 'benchmark-dataset', 'benchmark-run', 'benchmark-normalization-mode', 'benchmark-mates', 'benchmark-normalize'].includes(this.currentStep.id)) {
-      this.later(() => { this.cdr.detectChanges(); this.updateLayoutInstant(); }, 100);
+    if (['workspace-align', 'workspace-search', 'benchmark-dataset', 'benchmark-run', 'benchmark-normalization-mode', 'benchmark-mates', 'benchmark-normalize'].includes(this.currentStep.id)) {
+      this.later(() => {
+        if (this.currentStep.id === 'workspace-align' && this.isCurrentActionCompleted) this.clickInternally('#guide-workspace-align-toggle');
+        this.cdr.detectChanges(); this.updateLayoutInstant();
+      }, 100);
     }
   }
 
@@ -2063,6 +2023,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   @HostListener('window:resize')
   onResize() {
     this.updateLayoutInstant();
+  }
+
+  @HostListener('window:input')
+  onGuideInput() {
+    if (['workspace-search', 'window-check'].includes(this.currentStep.id)) {
+      this.later(() => { this.cdr.detectChanges(); this.updateLayoutInstant(); }, 100);
+    }
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -2213,8 +2180,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     this.clearPendingActions();
     this.restoreModuleExamples();
     this.restoreViewer();
-    this.workspace?.beginGuideExample(workspaceExampleItems());
+    this.workspace?.beginGuideExample([]);
     this.guideMode = 'workspace';
+    document.body?.classList.add('casmango-workspace-guide');
     this.currentStepIndex = 0;
     this.requestTab.emit('workspace');
     this.cdr.detectChanges();
@@ -2303,6 +2271,30 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     } finally {
       if (!this.destroyed && this.actionRevision === revision && this.guideMode === mode && this.currentStepIndex === step) {
         this.pendingAction = false; this.cdr.detectChanges(); this.updateLayoutInstant();
+      }
+    }
+  }
+
+  private async loadWorkspaceExample() {
+    this.pendingAction = true;
+    this.guideImportError = '';
+    const revision = this.actionRevision;
+    try {
+      const doc = await parseFastqFile(workspaceExampleFile());
+      if (this.destroyed || revision !== this.actionRevision || this.guideMode !== 'workspace') return;
+      const example = workspaceExampleItems().find(item => item.type === 'fastq');
+      if (example?.type === 'fastq') doc.alignmentPreset = example.autoAlign;
+      await this.workspace?.saveItem(doc);
+      if (this.destroyed || revision !== this.actionRevision || this.guideMode !== 'workspace') return;
+      this.workspace?.selectItem(doc.id);
+      window.dispatchEvent(new CustomEvent('casmango:guide-workspace-panel', { detail: { panel: 'viewer' } }));
+      this.requestTab.emit('workspace');
+    } catch {
+      if (revision === this.actionRevision) this.guideImportError = 'Could not load the example FASTQ. Click IMPORT to retry.';
+    } finally {
+      if (revision === this.actionRevision) {
+        this.pendingAction = false;
+        this.cdr.detectChanges(); this.updateLayoutInstant();
       }
     }
   }
@@ -2556,9 +2548,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.guideImportError = ''; this.state.resultsUpdated$.next();
     }
     if (this.guideMode === 'workspace') {
-      if (step.id === 'workspace-inspector') this.workspace?.selectItem('guide-cpc-reference');
-      const panel = step.id === 'workspace-explorer' || step.id === 'workspace-reads' ? 'files'
-        : step.id === 'workspace-inspector' ? 'details' : 'viewer';
+      const panel = step.id === 'workspace-reads' && !this.isCurrentActionCompleted ? 'files' : 'viewer';
+      if (step.id === 'workspace-align') this.later(() => {
+        if (!document.querySelector('#guide-workspace-align-config')) this.clickInternally('#guide-workspace-align-toggle');
+      }, 80);
       this.later(() => window.dispatchEvent(new CustomEvent('casmango:guide-workspace-panel', { detail: { panel } })), 50);
     }
     if (this.guideMode === 'benchmark' && ['benchmark-params', 'benchmark-dataset', 'benchmark-run', 'benchmark-results'].includes(step.id)) {
@@ -2586,6 +2579,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   }
 
   private restoreModuleExamples() {
+    document.body?.classList.remove('casmango-workspace-guide');
     this.workspace?.endGuideExample();
     if (this.savedBenchmark) {
       if (this.state.benchIsLoading || document.querySelector('#guide-bench-normalize-run[data-guide-running="true"]')) this.state.cancelBenchmark();

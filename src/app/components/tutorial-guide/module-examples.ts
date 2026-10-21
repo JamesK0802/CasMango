@@ -46,3 +46,10 @@ export function workspaceExampleItems(): ProjectItem[] {
         lengthDistribution: Object.fromEntries(lengths.map(n => [n, 1])), qualityDistribution: { 40: 3 } },
       autoAlign: { windowSeq: GUIDE_REFERENCE.slice(cut - 45, cut + 45), refSeq: GUIDE_REFERENCE, grnaSeq: GUIDE_GRNA, winSize: 90 } }];
 }
+
+/** A genuine FASTQ import, with the same three reads used by the workspace example. */
+export function workspaceExampleFile(): File {
+  const item = workspaceExampleItems().find(i => i.type === 'fastq') as any;
+  return new File([item.reads.map((r: any) => `@${r.id}\n${r.seq}\n+\n${r.qualString}\n`).join('')],
+    'guide_WT_and_edited_reads.fastq', { type: 'text/plain' });
+}

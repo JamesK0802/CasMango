@@ -100,6 +100,31 @@ describe('guided interaction boundaries', () => {
     expect(guide.closeGuide).toHaveBeenCalledTimes(1);
   });
 
+  it('allows Window Check inputs, matrix cells and comparison scrolling but not panel closing', () => {
+    const { guide } = setup(); step(guide, 'window-check'); guide.windowCheckOpened = true;
+    for (const selector of ['#guide-window-check-panel input', '#guide-window-check-panel .similarity-table td', '#guide-pair-comparison .alignment-box', '#guide-pair-comparison .btn-close-comparison']) {
+      const e = event([selector]); (guide as any).guardInteraction(e);
+      expect(e.preventDefault).not.toHaveBeenCalled();
+    }
+    const close = event(['.btn-close-window-check']); (guide as any).guardInteraction(close);
+    expect(close.preventDefault).toHaveBeenCalled();
+  });
+
+  it('reduces Sequence Viewer to import, align and search with real completion gates', () => {
+    const { guide, nodes } = setup(); guide.guideMode = 'workspace';
+    expect(guide.workspaceSteps.map(s => s.id)).toEqual(['workspace-reads', 'workspace-align', 'workspace-search', 'workspace-final']);
+    guide.currentStepIndex = 1;
+    expect(guide.isCurrentActionCompleted).toBe(false);
+    const allowed = event(['#guide-workspace-run-align']); (guide as any).guardInteraction(allowed);
+    expect(allowed.preventDefault).not.toHaveBeenCalled();
+    nodes.set('#guide-workspace-reads[data-aligned="true"]', {});
+    expect(guide.isCurrentActionCompleted).toBe(true);
+    guide.currentStepIndex = 2;
+    expect(guide.isCurrentActionCompleted).toBe(false);
+    nodes.set('#guide-workspace-reads[data-guide-search-complete="true"]', {});
+    expect(guide.isCurrentActionCompleted).toBe(true);
+  });
+
   it('allows only generated blob download links outside the highlighted action', () => {
     const { guide } = setup(); step(guide, 'result-export-report', 'result');
     const download = event([]);
@@ -270,17 +295,17 @@ describe('Results guide entry and readiness', () => {
     expect(excel.importFromExcel).toHaveBeenCalledWith(file); expect(guide.viewerLoaded).toBe(true);
   });
 
-  it('keeps unrelated drop areas locked and supports select-then-drop on touch', async () => {
+  it('keeps unrelated areas locked and restores with a single drop-zone click', async () => {
     const { guide, state, excel } = setup(); step(guide, 'result-viewer-reproduce', 'result');
     state.lastExportedFile = new File(['workbook'], 'guide.xlsx');
     excel.importFromExcel.mockResolvedValue({ scopes: [{ genes: [] }] });
     const elsewhere = event(['#guide-upload-zone'], 'drop');
     (guide as any).guardInteraction(elsewhere);
     expect(elsewhere.preventDefault).toHaveBeenCalled(); expect(excel.importFromExcel).not.toHaveBeenCalled();
-    const noFile = event(['#guide-viewer-dropzone']); (guide as any).guardInteraction(noFile);
-    expect(excel.importFromExcel).not.toHaveBeenCalled();
-    guide.armGuideReport(); (guide as any).guardInteraction(event(['#guide-viewer-dropzone']));
+    (guide as any).guardInteraction(event(['#guide-viewer-dropzone']));
+    (guide as any).guardInteraction(event(['#guide-viewer-dropzone']));
     await Promise.resolve(); expect(excel.importFromExcel).toHaveBeenCalledWith(state.lastExportedFile);
+    expect(excel.importFromExcel).toHaveBeenCalledTimes(1);
   });
 
   it('does not advance benchmark until actual calculation has finished', () => {
