@@ -72,6 +72,10 @@ export interface TargetResult {
   is_rc?: boolean;
   strand?: string;
   top_groups?: MutationGroup[];
+  /** Groups before the final frequency filter; no alignment needs to be rerun. */
+  unfiltered_top_groups?: MutationGroup[];
+  threshold_data_complete?: boolean;
+  applied_indel_threshold?: number;
 }
 
 export interface FileResult {

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { findMergeTarget } from '../models/result-merge';
+import { applyIndelThreshold, mergeThresholdBaselines } from '../models/indel-threshold';
 import { CurationConfig, targetKey, groupKey } from '../models/curation.model';
 import {
   GeneResult,
@@ -67,7 +68,8 @@ export class CurationService {
     }
 
     // 4. Rebuild merged genes across included files
-    const merged = this.rebuildMergedGenes(includedFiles, config);
+    const merged = clonedFiles.length ? this.rebuildMergedGenes(includedFiles, config)
+      : this.filterAndRecalcGenes(JSON.parse(JSON.stringify(originalMergedGenes)), config);
 
     // 5. Recalculate aggregated debug totals from included files
     let totalAmb = 0, totalRaw = 0, totalPhred = 0, totalAnchor = 0;
@@ -78,6 +80,10 @@ export class CurationService {
       totalRaw += mrd.debug?.total_reads_parsed ?? 0;
       totalPhred += mrd.debug?.phred_passed_count ?? 0;
       totalAnchor += mrd.debug?.usable_for_assignment_count ?? mrd.debug?.anchor_matched_count ?? 0;
+    }
+    if (!clonedFiles.length) {
+      totalAmb = originalTotalMergedAmbiguous; totalRaw = originalTotalMergedRawReads;
+      totalPhred = originalTotalMergedPhredPassed; totalAnchor = originalTotalMergedAnchorMatched;
     }
 
     return {
@@ -132,6 +138,11 @@ export class CurationService {
    * summary and group-level percentages from the included groups only.
    */
   private recalcTarget(target: TargetResult, geneName: string, config: CurationConfig): TargetResult {
+    if (config.indelThreshold !== undefined) {
+      const baseline = target.unfiltered_top_groups ?? target.top_groups ?? [];
+      const excluded = new Set(baseline.filter(g => config.excludedGroups.includes(groupKey(geneName, target.target_id, g.read_inner))).map(g => g.read_inner));
+      return applyIndelThreshold(target, config.indelThreshold, excluded);
+    }
     const allGroups: MutationGroup[] = target.top_groups ?? [];
 
     const includedGroups = allGroups.filter(
@@ -251,6 +262,7 @@ export class CurationService {
                 return;
               }
               extT.target_id = aliases(extT.target_id, newT.target_id);
+              mergeThresholdBaselines(extT, newT);
 
               const s1 = extT.summary, s2 = newT.summary;
               const b1 = extT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };

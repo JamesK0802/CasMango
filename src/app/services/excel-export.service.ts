@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { GeneResult } from '../models/analysis.model';
 import { CurationConfig } from '../models/curation.model';
+import { applyIndelThreshold } from '../models/indel-threshold';
 
 export interface ExportParams {
   windowSize: number; phredThreshold: number; indelThreshold: number;
@@ -12,6 +13,9 @@ export interface ExportParams {
   sequencingPlatform?: 'nanopore' | 'illumina';
   analyzeAmbiguous: boolean; rescueAmbiguous: boolean;
   dataType: string; fileCount: number;
+  /** Restoration metadata provenance; visible worksheets retain indelThreshold. */
+  exportedIndelThreshold?: number;
+  thresholdRecoveryComplete?: boolean;
 }
 
 export interface ReadFlowData {
@@ -52,7 +56,23 @@ export class ExcelExportService {
     const dataSheet = wb.addWorksheet('.metadata', { state: 'hidden' });
     // Retained scopes are the new baseline. Keep exclusions only as provenance,
     // never as an active overlay that could be reapplied when reopening.
-    const jsonData = JSON.stringify({ params, scopes, curationConfig: null, curationHistory: curationConfig || null });
+    const metadataScopes = scopes.map(scope => ({ ...scope, genes: scope.genes.map(gene => ({ ...gene,
+      analysis_result: { ...gene.analysis_result, targets: gene.analysis_result.targets.map(target => {
+        const hasGroups = !!(target.unfiltered_top_groups || target.top_groups?.length || target.summary?.aligned_reads === 0);
+        const complete = hasGroups && (target.threshold_data_complete === true ||
+          (target.threshold_data_complete !== false && params.indelThreshold === 0));
+        // Old summary-only reports cannot reconstruct absent groups. Preserve their counts.
+        if (!hasGroups) return { ...target, threshold_data_complete: false };
+        const zeroThreshold = applyIndelThreshold({ ...target, threshold_data_complete: complete }, 0);
+        // top_groups already contains the full baseline at zero; avoid duplicating it in JSON.
+        delete zeroThreshold.unfiltered_top_groups;
+        return zeroThreshold;
+      }) }
+    })) }));
+    const recoveryComplete = metadataScopes.every(scope => scope.genes.every(gene => gene.analysis_result.targets.every(target => target.threshold_data_complete === true)));
+    const metadataParams = { ...params, indelThreshold: 0, exportedIndelThreshold: params.indelThreshold,
+      thresholdRecoveryComplete: recoveryComplete };
+    const jsonData = JSON.stringify({ params: metadataParams, scopes: metadataScopes, curationConfig: null, curationHistory: curationConfig || null });
     const chunkSize = 30000;
     for (let i = 0; i < jsonData.length; i += chunkSize) dataSheet.addRow([jsonData.substring(i, i + chunkSize)]);
     const buf = await wb.xlsx.writeBuffer();
@@ -313,6 +333,7 @@ export class ExcelExportService {
     addPair('Source Result', config.sourceResultTitle);
     addPair('Created At', config.createdAt);
     addPair('Saved As', 'Standalone curated baseline');
+    if (config.indelThreshold !== undefined) addPair('Indel Threshold (%)', config.indelThreshold);
     row++;
 
     // Exclusion summary

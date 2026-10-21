@@ -25,6 +25,7 @@ import { GenePayload } from './core/multi-reference-assigner';
 import { runBenchmark } from './core/benchmark-pipeline';
 import { IlluminaFilePair } from '../models/illumina.model';
 import { findMergeTarget } from '../models/result-merge';
+import { mergeThresholdBaselines } from '../models/indel-threshold';
 import { buildIlluminaPseudoReads, fastqReadsToString, preprocessIlluminaReads } from './core/illumina-preprocessor';
 
 let cancelled = false;
@@ -50,6 +51,7 @@ function addNumericFields(target: Record<string, any>, source: Record<string, an
 }
 
 function mergeTargetResult(target: any, source: any): void {
+  mergeThresholdBaselines(target, source);
   addNumericFields(target.summary, source.summary);
   addNumericFields(target.breakdown, source.breakdown);
   target.summary.failure_reasons ||= {};

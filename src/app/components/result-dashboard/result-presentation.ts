@@ -66,7 +66,7 @@ export function captureFigureSource(label: string, rows: ComparisonRow[]): Figur
   // A figure needs grouped outcomes and sequences, never one object per read.
   // Keep large Nanopore datasets out of each independent panel snapshot.
   return structuredClone({ label, rows: rows.map(row => ({ ...row,
-    target: row.target ? { ...row.target, read_details: [] } : undefined })) });
+    target: row.target ? { ...row.target, read_details: [], unfiltered_top_groups: undefined } : undefined })) });
 }
 export function moveFigurePanel(panels: FigurePanel[], from: number, to: number): FigurePanel[] {
   if (from < 0 || to < 0 || from >= panels.length || to >= panels.length || from === to) return [...panels];

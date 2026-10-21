@@ -33,6 +33,8 @@ export interface CurationConfig {
 
   /** Excluded annotation groups as "gene::target_id::read_inner" composite keys */
   excludedGroups: string[];
+  /** Optional post-analysis frequency filter, separate from manual exclusions. */
+  indelThreshold?: number;
 }
 
 /** Create a blank CurationConfig with empty exclusion lists. */

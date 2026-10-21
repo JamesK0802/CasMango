@@ -363,6 +363,12 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     this.refreshDashboard();
   }
 
+  changeCuratedThreshold(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.state.setCuratedIndelThreshold(input.value);
+    input.value = String(this.state.curationConfig?.indelThreshold ?? 0);
+  }
+
   onMobileScopeChange(event: Event) {
     const value = Number((event.target as HTMLSelectElement).value);
     this.selectScope(value);

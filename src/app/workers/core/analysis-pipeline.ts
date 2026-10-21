@@ -89,6 +89,9 @@ export interface TargetResult {
   ref_sequence: string;
   cut_site_index: number;
   top_groups: TopGroup[];
+  unfiltered_top_groups?: TopGroup[];
+  threshold_data_complete?: boolean;
+  applied_indel_threshold?: number;
   error?: string;
 }
 
@@ -414,6 +417,19 @@ function runAnalysisOnReads(
       };
     });
 
+    // Retain the pre-frequency-filter evidence for reversible post-processing.
+    // Assignment, alignment, classification and the displayed result stay unchanged.
+    const unfilteredTopGroups: TopGroup[] = Object.values(groupsDict)
+      .sort((a, b) => b.read_count - a.read_count)
+      .map((g, idx) => ({
+        group_rank: idx + 1, read_inner: g.read_inner, read_count: g.read_count,
+        read_pct: aligned > 0 ? Math.round(g.read_count * 10000 / aligned) / 100 : 0,
+        classification: g.classification === 'out_of_frame' ? 'Out-of-frame indel'
+          : g.classification === 'in_frame' ? 'In-frame indel'
+          : g.has_sub ? 'Substitution' : 'No indel',
+        net_indel: g.net_indel, tokens: g.tokens
+      }));
+
     // Step 6: Build result payload
     const failureReasons = {
       fail_no_anchor: counts['fail_no_anchor'],
@@ -461,6 +477,9 @@ function runAnalysisOnReads(
       ref_sequence: refInnerFixed,
       cut_site_index: cutSiteIndexFixed,
       top_groups: topGroups,
+      unfiltered_top_groups: unfilteredTopGroups,
+      threshold_data_complete: true,
+      applied_indel_threshold: indelThreshold,
     };
 
     targetResultsList.push(targetResult);

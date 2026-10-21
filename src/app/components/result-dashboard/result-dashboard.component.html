@@ -22,6 +22,15 @@
     </div>
   </div>
 
+  <div class="curated-threshold-bar" *ngIf="state.isCuratedView" id="guide-curated-threshold">
+    <label for="curated-indel-threshold">Indel threshold</label>
+    <input id="curated-indel-threshold" type="number" min="0" max="100" step="0.1"
+      [value]="state.curationConfig?.indelThreshold ?? state.lastRunParams?.indelThreshold ?? 0"
+      (change)="changeCuratedThreshold($event)">
+    <span>%</span><small>Post-processing only · recalculates results without rerunning alignment. New figure panels use this threshold.</small>
+    <small class="threshold-recovery-warning" *ngIf="!state.thresholdRecoveryComplete">This earlier report lacks pre-filter groups. Lowering the threshold cannot recover reads already omitted from it; rerun the source FASTQs for full recovery.</small>
+  </div>
+
   <!-- ── Mobile Top Bar (Select file + Menu button) ── -->
   <div class="mobile-top-bar">
     <div class="mobile-select-wrapper" *ngIf="state.isMultiReference && state.multiFileCount > 1">

@@ -1,5 +1,6 @@
 import { Injectable, NgZone } from '@angular/core';
 import { findMergeTarget } from '../models/result-merge';
+import { mergeThresholdBaselines, sanitizeIndelThreshold } from '../models/indel-threshold';
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
 import { BehaviorSubject, Subject, Subscription } from 'rxjs';
 import { ExcelExportService, ExportParams } from './excel-export.service';
@@ -683,6 +684,7 @@ export class AppStateService {
                 return;
               }
               extT.target_id = mergeAliases(extT.target_id, newT.target_id);
+              mergeThresholdBaselines(extT, newT);
               const s1 = extT.summary, s2 = newT.summary;
               const b1 = extT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
               const b2 = newT.breakdown || { out_of_frame: 0, in_frame: 0, no_indel: 0, substitution: 0, failed: 0 };
@@ -839,9 +841,18 @@ export class AppStateService {
   enterCuratedView(name?: string) {
     if (this.isCuratedView) return;
     this.originalSlotSnapshot = JSON.parse(JSON.stringify(this.slot));
+    // Preserve legacy incompleteness even if the user later selects threshold 0.
+    // Zero on a derived view must not certify that previously discarded groups exist.
+    const snapshotGenes = [this.originalSlotSnapshot!.mergedGenes,
+      ...this.originalSlotSnapshot!.allFileResults.map(file => file.multi_reference_result?.genes ?? [])];
+    for (const genes of snapshotGenes) for (const gene of genes) for (const target of gene.analysis_result?.targets ?? []) {
+      if (target.threshold_data_complete === undefined) target.threshold_data_complete =
+        this.lastRunParams?.thresholdRecoveryComplete !== false && this.lastRunParams?.indelThreshold === 0;
+    }
     this.curationConfig = emptyCurationConfig();
     this.curationConfig.sourceResultTitle = this.lastRunParams?.dataType || 'Analysis';
     this.curationConfig.curatedViewName = name || `Curated — ${new Date().toLocaleDateString()}`;
+    this.curationConfig.indelThreshold = sanitizeIndelThreshold(this.lastRunParams?.indelThreshold);
     this.isCuratedView = true;
     this.recalculateCuratedView();
   }
@@ -948,13 +959,30 @@ export class AppStateService {
     this.totalMergedAnchorMatched = out.totalMergedAnchorMatched;
     this.allFileResults = out.allFileResults;
     this.multiFileCount = out.multiFileCount;
-    this.selectedScopeIndex = -1;
+    // A threshold adjustment should not unexpectedly switch a per-file view to Merged.
+    if (this.selectedScopeIndex >= this.allFileResults.length) this.selectedScopeIndex = -1;
     this.updateVisibleGenes();
     this.resultsUpdated$.next();
   }
 
   isFileExcluded(fileName: string): boolean {
     return this.curationConfig?.excludedFiles.includes(fileName) ?? false;
+  }
+
+  setCuratedIndelThreshold(value: unknown): void {
+    if (!this.isCuratedView || !this.curationConfig) return;
+    const threshold = sanitizeIndelThreshold(value);
+    if (this.curationConfig.indelThreshold === threshold) return;
+    this.curationConfig.indelThreshold = threshold;
+    this.recalculateCuratedView();
+  }
+
+  get thresholdRecoveryComplete(): boolean {
+    const slot = this.originalSlotSnapshot ?? this.slot;
+    const genes = slot.allFileResults?.length
+      ? slot.allFileResults.flatMap((file: any) => file.multi_reference_result?.genes ?? []) : slot.mergedGenes;
+    return (genes ?? []).every((gene: GeneResult) => gene.analysis_result.targets.every(target =>
+      target.threshold_data_complete === true || (target.threshold_data_complete !== false && slot.lastRunParams?.indelThreshold === 0)));
   }
 
   isGeneExcluded(geneName: string): boolean {
@@ -1029,7 +1057,8 @@ export class AppStateService {
       });
     }
 
-    return { params: this.lastRunParams, scopes };
+    return { params: { ...this.lastRunParams,
+      indelThreshold: this.isCuratedView ? (this.curationConfig?.indelThreshold ?? this.lastRunParams.indelThreshold) : this.lastRunParams.indelThreshold }, scopes };
   }
 
   getOriginalExportData() {
@@ -1089,6 +1118,8 @@ export class AppStateService {
           const k = groupKey(g.gene, t.target_id, grp.read_inner);
           return !this.curationConfig!.excludedGroups.includes(k);
         });
+        if (t.unfiltered_top_groups) t.unfiltered_top_groups = t.unfiltered_top_groups.filter(grp =>
+          !this.curationConfig!.excludedGroups.includes(groupKey(g.gene, t.target_id, grp.read_inner)));
       }
     }
   }
