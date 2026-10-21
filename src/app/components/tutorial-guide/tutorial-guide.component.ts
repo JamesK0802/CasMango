@@ -34,7 +34,7 @@ export interface GuideStep {
   isPrereq?: boolean;
   isFinal?: boolean;
   nextButtonText?: string;
-  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer' | 'workspace_align' | 'workspace_search' | 'workspace_reads' | 'bench_load' | 'bench_run' | 'bench_normalization' | 'bench_mates' | 'bench_normalize' | 'homeo_open' | 'homeo_select' | 'figure_homeo' | 'figure_both';
+  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'switch_reference' | 'click_export' | 'switch_to_viewer' | 'workspace_align' | 'workspace_search' | 'workspace_reads' | 'bench_load' | 'bench_run' | 'bench_normalization' | 'bench_mates' | 'bench_normalize' | 'homeo_open' | 'homeo_select' | 'figure_homeo' | 'figure_both';
   actionPromptText?: string;
   actionSuccessText?: string;
 }
@@ -982,8 +982,6 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private actionRevision = 0;
   private targetObserver?: ResizeObserver;
   private observedTarget?: Element;
-  private excludedExample = false;
-  private restoredExample = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private savedViewer?: AppStateService['viewerSlot'];
   private savedCuration?: { config: AppStateService['curationConfig']; curated: boolean; original: AppStateService['originalSlotSnapshot']; exported: File | null };
@@ -1096,7 +1094,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'File Upload',
       headline: 'Upload FASTQ Sequencing Files',
       textLines: [
-        '• Supports .fastq and .gz files (Illumina pairs link automatically by name).'
+        '• Drop files or folders, or choose Upload files / Upload folder. Supports FASTQ, FQ and GZ; Illumina pairs link by name.',
+        '• Collect into folder gathers the loaded files. Turn on Change file name to rename them together; paste a column of names to fill multiple rows.'
       ],
       targetSelector: '#guide-upload-zone',
       interactiveAction: 'load_demo_files',
@@ -1497,21 +1496,16 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       targetSelector: '#guide-curate-btn',
       interactiveAction: 'test_curation',
       actionPromptText: 'Click "Create Curated View" to continue',
-      actionSuccessText: 'Curated view ready. Next, try excluding a group.',
-      nextButtonText: 'Next: Exclude a Group ▶'
+      actionSuccessText: 'Curated view ready.',
+      nextButtonText: 'Next: Explore Curation ▶'
     },
     {
-      id: 'result-exclude-group', stageName: 'Try Curation', headline: 'Exclude the last mutation group',
-      textLines: ['Click × beside Group 5 to exclude it and update the summary.'],
-      targetSelector: '#guide-annotation-panel', interactiveAction: 'exclude_group',
-      actionPromptText: 'Click × beside Group 5', actionSuccessText: 'Group excluded. Notice its crossed-out row and the updated counts.',
-      nextButtonText: 'Next: Restore the Group ▶'
-    },
-    {
-      id: 'result-restore-group', stageName: 'Restore Curation', headline: 'Restore the excluded group',
-      textLines: ['Click ↩ to restore the group and its reads.'],
-      targetSelector: '#guide-annotation-panel', interactiveAction: 'restore_group',
-      actionPromptText: 'Click ↩ beside the excluded group', actionSuccessText: 'Group restored. The original counts are back.',
+      id: 'result-edit-curation', stageName: 'Explore Curation', headline: 'Explore your curated view',
+      textLines: [
+        '• Click × to exclude an item and ↩ to restore it. Hold and drag across × buttons, or Shift-click, to change a range. Right-click a group’s × to exclude it and all groups below.',
+        '• Indel threshold (%) beside Annotation filters low-frequency mutation groups and updates the results without rerunning alignment. Try a different value and compare the summary.'
+      ],
+      targetSelector: '#guide-annotation-panel',
       nextButtonText: 'Next: Compare References ▶'
     },
 
@@ -1653,8 +1647,6 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'homeo_select': return !!document.querySelector('#guide-homeo-comparison[data-selection-count="1"] #guide-homeo-second-reference[aria-pressed="false"]');
       case 'figure_homeo':
       case 'figure_both': return !!document.querySelector('#guide-figure-btn[aria-pressed="true"]') && Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) >= 4;
-      case 'exclude_group': return this.excludedExample;
-      case 'restore_group': return this.restoredExample;
       case 'click_export':
         return this.exportTested || this.state.lastExportedFile !== null;
       case 'switch_to_viewer':
@@ -1676,7 +1668,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (this.pendingAction) return false;
     if (this.guideMode === 'benchmark' && this.benchmarkUnavailable) return false;
     const step = this.currentStep;
-    if (step.targetSelector && !document.querySelector(this.currentStepTargetSelector!)) return false;
+    if (step.id !== 'result-edit-curation' && step.targetSelector && !document.querySelector(this.currentStepTargetSelector!)) return false;
     if (step.isIntro || step.isPrereq) return true;
     if (step.interactiveAction) {
       return this.isCurrentActionCompleted;
@@ -1735,11 +1727,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   // The spotlight is visual only. Enforce interaction rules at capture phase,
   // before Angular handlers, including keyboard activation and drag/drop.
   private get isOptionalExploration(): boolean {
-    return this.guideMode === 'result' && ['result-homeo-open', 'result-figure-homeo'].includes(this.currentStep.id);
+    return this.guideMode === 'result' && ['result-edit-curation', 'result-homeo-open', 'result-figure-homeo'].includes(this.currentStep.id);
   }
 
   private allowedSelectors(): string[] {
     if (this.pendingAction) return [];
+    if (this.currentStep.id === 'result-edit-curation') return [
+      '.exclude-btn-group', '.exclude-btn-sm', '.exclude-toggle', '.group-context-menu',
+      '#guide-curated-threshold input', '.gene-tab-btn', '.scope-tab-btn'
+    ];
     if (this.isOptionalExploration) return [
       '#guide-open-homeo', '.homeo-pane', '.figure-workspace', '.workspace-rail',
       '#guide-figure-btn', '.gene-tab-btn', '.scope-tab-btn'
@@ -1759,8 +1755,6 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'result-figure-homeo':
       case 'result-figure-both': return ['#guide-figure-btn', '#guide-figure-workspace'];
       case 'result-curation': return this.state.isCuratedView ? [] : ['#guide-curate-btn'];
-      case 'result-exclude-group': return this.excludedExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
-      case 'result-restore-group': return this.restoredExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-export-report': return this.exportTested ? [] : [this.state.isCuratedView ? '#guide-export-curated-btn' : '#guide-export-excel-btn'];
       case 'result-viewer-reproduce': return this.viewerLoaded ? [] : ['#guide-viewer-dropzone'];
       case 'workspace-reads': return this.isCurrentActionCompleted ? [] : ['#guide-workspace-import'];
@@ -1801,12 +1795,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
       return;
     }
-    if (['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)
-        && ['pointerdown', 'mousedown', 'touchstart'].includes(event.type)) {
-      // A tutorial click must not start the normal drag-to-delete sweep.
-      event.preventDefault(); event.stopImmediatePropagation(); return;
-    }
     const permitted = (!['contextmenu', 'dblclick', 'dragstart', 'dragover', 'drop'].includes(event.type)
+      || (this.currentStep.id === 'result-edit-curation' && event.type === 'contextmenu' && !!target.closest('.exclude-btn-group'))
       || (this.isOptionalExploration && ['dragstart', 'dragover', 'drop'].includes(event.type) && !!target.closest('.panel-item')))
       && this.allowedSelectors().some(selector => target.closest(selector));
     if (!permitted) {
@@ -1814,9 +1804,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       if (event.type === 'focusin') (document.querySelector('.btn-top-exit') as HTMLElement | null)?.focus();
       return;
     }
-    const groupKey = ['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)
-      && event.type === 'keydown' && ['Enter', ' '].includes((event as KeyboardEvent).key);
-    if (event.type === 'click' || groupKey) this.onCaptureClick(event as MouseEvent);
+    if (event.type === 'click') this.onCaptureClick(event as MouseEvent);
   }
 
   private later(callback: () => void, delay: number) {
@@ -1850,21 +1838,6 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         this.revealResultTarget();
         this.cdr.detectChanges(); this.updateLayoutInstant();
       }, 300);
-    }
-
-    if (['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)) {
-      event.preventDefault(); event.stopImmediatePropagation();
-      const gene = this.state.currentGene?.gene;
-      const targetResult = this.state.selectedTarget;
-      const group = targetResult?.top_groups?.find((g: any) => g.group_rank === 5);
-      if (gene && group) {
-        this.state.toggleGroupExclusion(gene, targetResult.target_id, group.read_inner);
-        const excluded = this.state.isGroupExcluded(gene, targetResult.target_id, group.read_inner);
-        if (this.currentStep.id === 'result-exclude-group') this.excludedExample = excluded;
-        else this.restoredExample = !excluded;
-        this.cdr.detectChanges(); this.updateLayoutInstant();
-      }
-      return;
     }
 
     if (this.currentStep.id === 'workspace-reads' && target.closest('#guide-workspace-import')) {
@@ -2208,7 +2181,6 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     }
     this.curationTested = false; this.exportTested = false; this.viewerLoaded = false;
     this.viewerPrepared = false; this.restorePreview = undefined; this.reportArmed = false; this.guideImportError = '';
-    this.excludedExample = false; this.restoredExample = false;
     this.state.lastExportedFile = null;
     this.state.guideReadActionsPreview = true;
     this.state.activateSlot('viewer');

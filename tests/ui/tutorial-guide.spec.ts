@@ -183,26 +183,43 @@ describe('guided interaction boundaries', () => {
     state.currentGene = { gene: 'TRY' }; expect(guide.isCurrentActionCompleted).toBe(true);
   });
 
-  it('allows one example-group exclusion and then requires restoring it', () => {
-    const { guide, state } = setup(); step(guide, 'result-exclude-group', 'result');
-    let excluded = false;
-    state.currentGene = { gene: 'TRY' }; state.selectedTarget = { target_id: 't1', top_groups: [{ group_rank: 5, read_inner: 'ACTG' }] };
-    state.isGroupExcluded = () => excluded;
-    state.toggleGroupExclusion = vi.fn(() => excluded = !excluded);
-    const selector = '#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group';
-    (guide as any).guardInteraction(event([selector]));
-    expect(guide.isCurrentActionCompleted).toBe(true); expect(excluded).toBe(true);
-    (guide as any).guardInteraction(event([selector]));
-    expect(state.toggleGroupExclusion).toHaveBeenCalledTimes(1);
-    step(guide, 'result-restore-group', 'result'); expect(guide.isCurrentActionCompleted).toBe(false);
-    (guide as any).guardInteraction(event([selector], 'keydown', 'Enter'));
-    expect(excluded).toBe(false); expect(guide.isCurrentActionCompleted).toBe(true);
+  it('combines curation into one optional exercise without exclusion or restore gates', () => {
+    const { guide, nodes } = setup(); step(guide, 'result-edit-curation', 'result');
+    nodes.set('#guide-annotation-panel', {});
+    expect(guide.currentSteps.some(s => ['result-exclude-group', 'result-restore-group'].includes(s.id))).toBe(false);
+    expect(guide.currentStep.interactiveAction).toBeUndefined();
+    expect(guide.isCurrentActionCompleted).toBe(true);
+    expect(guide.isNextButtonEnabled).toBe(true);
+    expect(guide.currentStep.textLines?.join(' ')).toContain('Indel threshold (%)');
+    // Excluding the selected reference can remove the annotation panel.
+    nodes.delete('#guide-annotation-panel');
+    expect(guide.isNextButtonEnabled).toBe(true);
   });
 
-  it('blocks drag-delete initiation during the group exercise', () => {
-    const { guide } = setup(); step(guide, 'result-exclude-group', 'result');
-    const e = event(['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'], 'pointerdown');
-    (guide as any).guardInteraction(e); expect(e.stopImmediatePropagation).toHaveBeenCalled();
+  it('allows normal exclusion, restoration, range selection and threshold editing', () => {
+    const { guide } = setup(); step(guide, 'result-edit-curation', 'result');
+    for (const selector of ['.exclude-btn-group', '.exclude-btn-sm', '.exclude-toggle', '#guide-curated-threshold input', '.group-context-menu']) {
+      for (const type of ['pointerdown', 'click', 'keydown', 'focusin']) {
+        const e = event([selector], type, 'Enter');
+        (guide as any).guardInteraction(e);
+        expect(e.stopImmediatePropagation).not.toHaveBeenCalled();
+      }
+    }
+    const menu = event(['.exclude-btn-group'], 'contextmenu');
+    (guide as any).guardInteraction(menu); expect(menu.preventDefault).not.toHaveBeenCalled();
+    for (const selector of ['#guide-all-reads-download-btn', '#guide-exit-curate-btn', '#guide-export-curated-btn']) {
+      const e = event([selector]); (guide as any).guardInteraction(e);
+      expect(e.preventDefault).toHaveBeenCalled();
+    }
+  });
+
+  it('explains folder upload and bulk filename editing with the upload controls', () => {
+    const { guide } = setup(); step(guide, 'file-upload');
+    const copy = guide.currentStep.textLines?.join(' ');
+    expect(copy).toContain('Upload folder');
+    expect(copy).toContain('Collect into folder');
+    expect(copy).toContain('Change file name');
+    expect(copy).toContain('paste a column');
   });
 
   it('does not accept existing user files as completion of the demo upload', () => {
