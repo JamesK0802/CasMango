@@ -72,6 +72,7 @@ function buildMotifRegex(query: string): RegExp | null {
       [attr.data-guide-search-complete]="isAlignedActive && searchHelpOpened && searchedGuideMotif && searchQuery.trim().toUpperCase() === 'NGG' && filteredReads.length > 0" class="fastq-viewer" (scroll)="onViewerScroll($event)">
       <div class="reads-panel">
         
+        <div id="guide-workspace-find-region">
         <!-- Compact Top Workspace Bar -->
         <div class="workspace-top-bar">
           <div class="top-bar-left">
@@ -118,6 +119,7 @@ function buildMotifRegex(query: string): RegExp | null {
           <button type="button" (click)="useNggExample()">Use NGG</button>
           <button type="button" (click)="searchHelpOpen = false">Close</button>
         </aside>
+        </div>
         <!-- Align Config Panel -->
         <div id="guide-workspace-align-config" class="align-config-panel" *ngIf="showAlignPanel">
           <div class="align-mode-tabs">

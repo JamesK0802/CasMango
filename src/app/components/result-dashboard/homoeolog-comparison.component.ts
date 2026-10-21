@@ -8,7 +8,7 @@ import { comparisonRows, comparisonSummary, FIGURE_COLORS, FigureSource } from '
   selector: 'app-homoeolog-comparison', standalone: true, imports: [CommonModule, FormsModule],
   template: `
     <div class="comparison" id="guide-homeo-comparison" [attr.data-selection-count]="selectedNames.length">
-      <div class="selectors"><label>Group<select aria-label="Homoeolog group" [ngModel]="activeGroup" (ngModelChange)="setGroup($event)"><option *ngFor="let name of groupNames" [value]="name">{{ name }}</option></select></label>
+      <div class="selectors"><label>Group<select aria-label="Homeolog group" [ngModel]="activeGroup" (ngModelChange)="setGroup($event)"><option *ngFor="let name of groupNames" [value]="name">{{ name }}</option></select></label>
       <label>Target<select aria-label="Comparison target" [ngModel]="activeTarget" (ngModelChange)="target = $event"><option *ngFor="let id of targetIds" [value]="id">{{ id }}</option></select></label></div>
       <div class="selection-heading"><strong>Compare references</strong><div><button type="button" id="guide-homeo-select-all" (click)="chooseAll()">All</button><button type="button" (click)="selection = []">Clear</button></div></div>
       <div class="reference-picker" id="guide-homeo-reference-picker">

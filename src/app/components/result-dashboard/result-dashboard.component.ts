@@ -37,7 +37,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   private presentationCache?: { genes: GeneResult[]; exclusions: string; projected: GeneResult[] };
 
   get hasHomoeologResults(): boolean {
-    return this.state.normalGenes.length > 1 || Boolean(this.state.lastRunParams?.homoeologMode);
+    return this.state.normalGenes.length > 1 && Boolean(this.state.lastRunParams?.homoeologMode);
   }
   get showHomoeolog(): boolean { return this.homoeologOpen && this.hasHomoeologResults; }
   get showFigure(): boolean { return this.standardFigureOpen || this.homoeologFigureOpen; }
@@ -331,7 +331,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
 
 
   ngOnInit() {
-    this.homoeologOpen = Boolean(this.state.lastRunParams?.homoeologMode);
+    this.homoeologOpen = Boolean(this.state.lastRunParams?.homoeologMode) && !this.state.guideReadActionsPreview;
     this.state.resultsUpdated$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       this.refreshDashboard();
     });

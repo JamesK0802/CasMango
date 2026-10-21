@@ -119,6 +119,13 @@ describe('figure snapshots and publication SVG', () => {
 });
 
 describe('figure source selection and initial panels', () => {
+  it('previews exports during free guide exploration without saving a file', async () => {
+    const composer = new FigureComposerComponent({bypassSecurityTrustHtml: (v: string) => v} as any, {detectChanges:vi.fn()} as any);
+    composer.previewOnly = true;
+    const save = vi.spyOn(composer as any, 'save');
+    composer.downloadSvg(); await composer.downloadPng();
+    expect(save).not.toHaveBeenCalled(); expect(composer.exportPreviewMessage).toContain('no file downloaded');
+  });
   it('seeds four panels once, preserves deletions and mixes reference/combination snapshots', () => {
     const composer = new FigureComposerComponent({bypassSecurityTrustHtml: (v: string) => v} as any, {detectChanges:vi.fn()} as any);
     composer.genes = [gene('7A'), gene('7D')]; composer.source = source(); composer.active = true;
@@ -138,7 +145,7 @@ describe('two-visible-pane workspace', () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
   function setup() {
     vi.useFakeTimers(); vi.stubGlobal('window', {matchMedia: () => ({matches:false})});
-    const state: any = { normalGenes:[gene('A'),gene('B')], lastRunParams:{}, allFileResults:[], selectedScopeIndex:-1 };
+    const state: any = { normalGenes:[gene('A'),gene('B')], lastRunParams:{homoeologMode:true}, allFileResults:[], selectedScopeIndex:-1 };
     const dashboard = new ResultDashboardComponent(state, {detectChanges:vi.fn()} as any, {run:(f: any)=>f()} as any);
     const panels = [{hidden:false,clientWidth:492,offsetLeft:0},{hidden:false,clientWidth:492,offsetLeft:508},{hidden:false,clientWidth:492,offsetLeft:1016}];
     const track = {children:panels,clientWidth:1000,scrollTo:vi.fn()}; dashboard.workspaceTrack = {nativeElement:track} as any;
@@ -146,6 +153,12 @@ describe('two-visible-pane workspace', () => {
   }
   it('shows Standard and Figure when no comparison is open', () => {
     const {dashboard} = setup(); dashboard.standardFigureOpen = true; expect(dashboard.workspacePanes).toEqual(['standard','analysis-figure']);
+  });
+  it('makes Homeolog comparison available only for Homeolog-mode results', () => {
+    const {dashboard} = setup();
+    expect(dashboard.hasHomoeologResults).toBe(true);
+    (dashboard.state as any).lastRunParams = {homoeologMode:false};
+    expect(dashboard.hasHomoeologResults).toBe(false);
   });
   it('scrolls to Homeo + Figure, not three compressed columns', () => {
     const {dashboard,track} = setup(); dashboard.homoeologOpen = true; dashboard.homoeologFigureOpen = true;

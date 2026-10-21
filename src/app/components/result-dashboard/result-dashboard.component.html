@@ -79,7 +79,7 @@
         (click)="exitCuratedView()">
         Back to Original
       </button>
-      <button type="button" *ngIf="hasHomoeologResults" id="guide-open-homeo" class="btn-new-analysis" [attr.aria-pressed]="showHomoeolog" (click)="toggleHomoeolog()">{{ showHomoeolog ? 'Close Homeo Analysis' : 'Add Homeo Analysis' }}</button>
+      <button type="button" *ngIf="hasHomoeologResults" id="guide-open-homeo" class="btn-new-analysis" title="Available for analyses run in Homeolog mode" [attr.aria-pressed]="showHomoeolog" (click)="toggleHomoeolog()">{{ showHomoeolog ? 'Close Homeolog Analysis' : 'Add Homeolog Analysis' }}</button>
     </div>
 
     <div class="right-actions" style="display: flex; gap: 12px;">
@@ -116,7 +116,7 @@
     <nav class="workspace-rail" *ngIf="workspacePanes.length > 2" aria-label="Result workspace windows">
       <button type="button" *ngFor="let pane of workspacePanes" [class.active]="activeWorkspacePane === pane" [attr.aria-label]="'Show ' + pane + ' window'" [attr.aria-pressed]="activeWorkspacePane === pane" (click)="focusWorkspace(pane)">
         <span class="mini-window" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span>{{ pane === 'homoeolog' ? 'Homeo' : pane === 'standard' ? 'Results' : pane === 'analysis-figure' ? 'Analysis figure' : 'Homeo figure' }}</span>
+        <span>{{ pane === 'homoeolog' ? 'Homeolog' : pane === 'standard' ? 'Results' : pane === 'analysis-figure' ? 'Analysis figure' : 'Homeolog figure' }}</span>
       </button>
     </nav>
     <div class="workspace-track" #workspaceTrack [class.single-pane]="workspacePanes.length === 1" (scroll)="onWorkspaceScroll()">
@@ -664,14 +664,14 @@
           <button type="button" id="guide-standard-figure" [attr.aria-pressed]="standardFigureOpen" (click)="toggleFigure('standard')">Analysis figure {{ standardFigureOpen ? '−' : '+' }}</button>
         </footer>
       </section>
-      <section class="workspace-pane homeo-pane" [hidden]="!showHomoeolog" aria-label="Homoeolog comparison">
+      <section id="guide-homeo-result-pane" class="workspace-pane homeo-pane" [hidden]="!showHomoeolog" aria-label="Homeolog comparison">
         <header class="workspace-pane-header" (pointerdown)="beginWorkspaceSwipe($event)" (pointerup)="endWorkspaceSwipe($event)" (pointercancel)="cancelWorkspaceSwipe()">
-          <div><strong>Homoeolog comparison</strong><small>Only the combination you select</small></div>
+          <div><strong>Homeolog comparison</strong><small>Only the combination you select</small></div>
           <button type="button" (click)="toggleHomoeolog()" aria-label="Close homoeolog comparison">×</button>
         </header>
         <div class="workspace-pane-body"><app-homoeolog-comparison [genes]="presentationGenes" [scopeLabel]="scopeLabel" (inspect)="inspectHomoeolog($event)" /></div>
         <footer class="workspace-pane-footer" (pointerdown)="beginWorkspaceSwipe($event)" (pointerup)="endWorkspaceSwipe($event)" (pointercancel)="cancelWorkspaceSwipe()">
-          <button type="button" id="guide-homeo-figure" [attr.aria-pressed]="homoeologFigureOpen" (click)="toggleFigure('homoeolog')">Homoeolog figure {{ homoeologFigureOpen ? '−' : '+' }}</button>
+          <button type="button" id="guide-homeo-figure" [attr.aria-pressed]="homoeologFigureOpen" (click)="toggleFigure('homoeolog')">Homeolog figure {{ homoeologFigureOpen ? '−' : '+' }}</button>
         </footer>
       </section>
       <section id="guide-analysis-figure-pane" class="workspace-pane figure-pane" [hidden]="!standardFigureOpen" aria-label="Analysis figure">
@@ -679,14 +679,14 @@
           <strong>Analysis figure</strong>
           <button type="button" id="guide-close-analysis-figure" (click)="toggleFigure('standard')" aria-label="Close analysis figure">×</button>
         </header>
-        <div class="figure-editor-scroll"><app-figure-composer origin="standard" [source]="standardFigureSource" [genes]="presentationGenes" [active]="standardFigureOpen" /></div>
+        <div class="figure-editor-scroll"><app-figure-composer origin="standard" [source]="standardFigureSource" [genes]="presentationGenes" [active]="standardFigureOpen" [previewOnly]="state.guideReadActionsPreview" /></div>
       </section>
-      <section id="guide-homeo-figure-pane" class="workspace-pane figure-pane" [hidden]="!homoeologFigureOpen" aria-label="Homoeolog figure">
+      <section id="guide-homeo-figure-pane" class="workspace-pane figure-pane" [hidden]="!homoeologFigureOpen" aria-label="Homeolog figure">
         <header class="workspace-pane-header" (pointerdown)="beginWorkspaceSwipe($event)" (pointerup)="endWorkspaceSwipe($event)" (pointercancel)="cancelWorkspaceSwipe()">
-          <strong>Homoeolog figure</strong>
+          <strong>Homeolog figure</strong>
           <button type="button" id="guide-close-homeo-figure" (click)="toggleFigure('homoeolog')" aria-label="Close homoeolog figure">×</button>
         </header>
-        <div class="figure-editor-scroll"><app-figure-composer origin="homoeolog" [source]="homoeologFigureSource" [genes]="presentationGenes" [active]="homoeologFigureOpen" /></div>
+        <div class="figure-editor-scroll"><app-figure-composer origin="homoeolog" [source]="homoeologFigureSource" [genes]="presentationGenes" [active]="homoeologFigureOpen" [previewOnly]="state.guideReadActionsPreview" /></div>
       </section>
     </div>
   </div>

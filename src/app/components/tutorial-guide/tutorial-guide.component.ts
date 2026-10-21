@@ -44,7 +44,7 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.workspace-tour]="guideMode === 'workspace'" [class.no-target]="!targetRect" tabindex="-1">
+    <div class="guide-root" [class.workspace-tour]="guideMode === 'workspace' && !currentStep.isIntro" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
@@ -68,34 +68,6 @@ export interface GuideStep {
            [style.width.px]="targetRect.width + 12"
            [style.height.px]="targetRect.height + 12">
       </div>
-
-      <!-- ── SVG Curved Dashed Arrow from Target to Speech Bubble ── -->
-      <svg class="arrow-svg-layer" *ngIf="targetRect && pathD">
-        <defs>
-          <marker id="guide-arrowhead"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse">
-            <polygon points="0 1, 9 5, 0 9" fill="#f59e0b" />
-          </marker>
-        </defs>
-
-        <!-- Origin Dot on the Spotlight Border -->
-        <circle [attr.cx]="arrowStartX" [attr.cy]="arrowStartY" r="4.5" fill="#f59e0b" />
-        <circle [attr.cx]="arrowStartX" [attr.cy]="arrowStartY" r="8" fill="none" stroke="#f59e0b" stroke-width="1.5" class="pulse-ring" />
-
-        <!-- Curved Dashed Connector Arrow -->
-        <path [attr.d]="pathD"
-              stroke="#f59e0b"
-              stroke-width="2.5"
-              stroke-dasharray="6,4"
-              fill="none"
-              class="animated-dashed-arrow"
-              marker-end="url(#guide-arrowhead)" />
-      </svg>
 
       <!-- ── Character on Left + Speech Bubble on Right ── -->
       <div class="guide-dialog-wrapper"
@@ -421,11 +393,13 @@ export interface GuideStep {
 
     .workspace-tour .guide-dialog-wrapper,
     .workspace-tour .guide-dialog-wrapper.is-centered {
-      position: fixed; top: auto !important; bottom: 12px; left: 16px !important;
-      width: calc(100% - 32px) !important; max-width: none; margin: 0; gap: 10px;
+      position: fixed; top: auto !important; bottom: 12px; left: 50% !important;
+      width: min(1100px, calc(100vw - 48px)) !important; max-width: calc(100vw - 48px); margin: 0; gap: 12px;
+      transform: translateX(-50%); animation: none;
       max-height: 188px; overflow-y: auto;
     }
-    .workspace-tour .mascot-col { width: 60px; min-width: 60px; }
+    .workspace-tour .mascot-col { width: 64px; min-width: 64px; flex: 0 0 64px; }
+    .workspace-tour .mascot-tag { max-width: 64px; box-sizing: border-box; font-size: 8px; padding: 3px 5px; }
     .workspace-tour .mascot-avatar-frame { width: 60px; height: 72px; }
     .workspace-tour .bubble-content { padding: 12px 16px; }
     .workspace-tour .bubble-headline { font-size: 17px; margin-bottom: 6px; }
@@ -1236,7 +1210,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         {
           badge: 'Tour 2',
           title: 'Results & Result Viewer',
-          desc: 'Tour results with the Figure 2 synthetic dataset: read filtering flow, metrics, 3 visual charts, annotation tracks, curation, and Excel report reproducibility.'
+          desc: 'Explore editing profiles, mutation groups, curation and result reports.'
         },
         {
           badge: 'Tour 3',
@@ -1255,8 +1229,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   workspaceSteps: GuideStep[] = [
     {
+      id: 'workspace-overview', stageName: 'Sequence Viewer', headline: 'Inspect reads in Sequence Viewer',
+      introLine: 'Import FASTQ files, or bring reads directly from Benchmark or a mutation group after analysis. Saved result reports do not include the original FASTQ reads.',
+      nextButtonText: 'Try it ▶', isIntro: true
+    },
+    {
       id: 'workspace-reads', stageName: 'Load FASTQ', headline: 'A workspace for your FASTQ reads',
-      textLines: ['Open FASTQ files exported from Results or Benchmark here. Click IMPORT to load three example reads: WT, −1 bp and +1 bp. Your saved workspace will be restored when you leave.'],
+      textLines: ['Click IMPORT to open a FASTQ file.'],
       targetSelector: '#guide-workspace-import', interactiveAction: 'workspace_reads',
       actionPromptText: 'Click IMPORT to load the example FASTQ',
       actionSuccessText: 'FASTQ loaded. Next, align the reads.',
@@ -1264,23 +1243,23 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'workspace-align', stageName: 'Align reads', headline: 'Align against a reference window',
-      textLines: ['The example reference window is filled in. Click Run Alignment to compare all three reads around the cut site. For your own files, paste a window or supply a reference and gRNA.'],
+      textLines: ['Align reads against a window sequence, or supply a reference and gRNA.'],
       targetSelector: '#guide-workspace-align-config', interactiveAction: 'workspace_align',
       actionPromptText: 'Click Run Alignment & Center Cut Sites',
-      actionSuccessText: 'Alignment complete: inspect the WT, deletion and insertion in the workspace.',
+      actionSuccessText: 'Reads aligned around the cut site.',
       nextButtonText: 'Next: Search ▶'
     },
     {
       id: 'workspace-search', stageName: 'Search reads', headline: 'Find a read by ID or sequence',
-      textLines: ['NGG is filled in. Click ? beside Search to see supported searches, then click Search to find PAM-like motifs. N matches any A/C/G/T base.'],
+      textLines: ['Open ? to explore ID, edit-type and motif searches. Try NGG: N matches any DNA base.'],
       targetSelector: '#guide-workspace-search', interactiveAction: 'workspace_search',
       actionPromptText: 'Open ?, then search for NGG',
-      actionSuccessText: 'NGG matching reads found; the alignment remains available.',
+      actionSuccessText: 'Matching reads found.',
       nextButtonText: 'Finish ▶'
     },
     {
       id: 'workspace-final', stageName: 'Workspace Complete', headline: 'Load → align → search',
-      textLines: ['Use this workspace to inspect FASTQ reads from Results or Benchmark. Exit the guide to return to your own files.'],
+      textLines: ['Import reads, align them and search by ID or sequence.'],
       isFinal: true
     }
   ];
@@ -1322,7 +1301,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Dataset Setup',
       headline: 'Labelled Classes & Expected References',
       textLines: [
-        'Load two labelled classes: CPC and TRY, with 12 synthetic Q40 reads each (8 WT and 4 one-base deletions). The expected gene comes from each input row. Your own benchmark inputs are preserved.'
+        'Provide FASTQ reads and their expected reference for each class.'
       ],
       targetSelector: '#guide-bench-dataset-card',
       interactiveAction: 'bench_load', actionPromptText: 'Click Load CPC + TRY example', actionSuccessText: 'Both labelled FASTQ classes are loaded.',
@@ -1330,14 +1309,14 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'benchmark-run', stageName: 'Run Classification', headline: 'Run the real classification pipeline',
-      textLines: ['Click Run Benchmark. This small example runs locally through the same pipeline as the main tool; the displayed metrics are calculated, not prefilled.'],
+      textLines: ['Run Benchmark to compare assignments against the expected references.'],
       targetSelector: '#guide-bench-run', interactiveAction: 'bench_run',
       actionPromptText: 'Click Run Benchmark and wait for completion', actionSuccessText: 'Classification finished. Continue to the calculated metrics.',
       nextButtonText: 'Next: Classification Results ▶'
     },
     {
       id: 'benchmark-results', stageName: 'Calculated Metrics', headline: 'Read the classification results',
-      textLines: ['Correct, Wrong and Ambiguous describe reference assignment among usable reads. The per-class table also reports filtered reads. This deliberately small error-free example demonstrates the workflow, not real-world accuracy.'],
+      textLines: ['Correct, Wrong and Ambiguous summarize assignment among usable reads. The table also reports filtered reads for each class.'],
       targetSelector: '#guide-bench-results', nextButtonText: 'Next: Illumina Normalization ▶'
     },
     {
@@ -1348,19 +1327,19 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'benchmark-mates', stageName: 'Example Mate Pairs', headline: 'Load overlapping and separated mates',
-      textLines: ['Load two synthetic mate pairs: one with a true overlap and one with separated reference ends. R2 uses the reverse-complement orientation. The X guard is 90 bp.'],
+      textLines: ['Load paired R1/R2 reads to inspect overlaps and separated mates.'],
       targetSelector: '#guide-bench-mates', interactiveAction: 'bench_mates', actionPromptText: 'Click Load example R1 + R2',
       actionSuccessText: 'Both mate files are loaded.', nextButtonText: 'Next: Normalize Reads ▶'
     },
     {
       id: 'benchmark-normalize', stageName: 'Run Normalization', headline: 'Normalize the example mates locally',
-      textLines: ['Run normalization to calculate consensus and X-padded output from these actual example FASTQ files.'],
+      textLines: ['Normalize the pairs to build consensus or X-padded reads.'],
       targetSelector: '#guide-bench-normalize-run', interactiveAction: 'bench_normalize', actionPromptText: 'Click Normalize Illumina Reads',
-      actionSuccessText: 'Normalization complete. The output statistics are calculated from the example.', nextButtonText: 'Next: Normalized Output ▶'
+      actionSuccessText: 'Normalization complete.', nextButtonText: 'Next: Normalized Output ▶'
     },
     {
       id: 'benchmark-normalization-results', stageName: 'Normalized Output', headline: 'Consensus and X-padded output',
-      textLines: ['The overlapping pair forms a consensus; separated mates retain their sequence with an X guard. After the tour, you can use Download FASTQ or Open in Sequence Viewer on your own output.'],
+      textLines: ['Overlapping mates form a consensus; separated mates retain an X guard. Open the output in Sequence Viewer to inspect it.'],
       targetSelector: '#guide-bench-normalization-results', nextButtonText: 'Finish Benchmark Tour ▶'
     },
     {
@@ -1385,12 +1364,12 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       id: 'result-welcome',
       stageName: 'Results Dashboard',
       headline: 'Results & Outcome Analysis',
-      introLine: 'Explore synthetic CPC and TRY results, then try excluding and restoring a mutation group. Your own results stay untouched.',
+      introLine: 'Explore editing profiles and mutation groups, then try curation.',
       cards: [
         {
-          badge: 'Synthetic Ground Truth',
-          title: 'CPC & TRY Example',
-          desc: 'Illustrative synthetic results for two references with different editing profiles.'
+          badge: 'References',
+          title: 'Reference Results',
+          desc: 'Switch between references to compare their editing profiles.'
         },
         {
           badge: 'Filter Transparency',
@@ -1501,7 +1480,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       headline: 'Read FASTQ Export & Sequence Viewer',
       textLines: [
         '• Download FASTQ exports all target reads or one mutation group. Sequence Viewer opens them for inspection.',
-        '• These buttons are shown as disabled previews in this synthetic example. They are available after an actual analysis while the original FASTQ files remain loaded.'
+        '• Read exports and direct transfer require the original FASTQ files from the current analysis.'
       ],
       targetSelector: '#guide-annotation-panel',
       nextButtonText: 'Next: Test Curation View ▶'
@@ -1523,42 +1502,28 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'result-exclude-group', stageName: 'Try Curation', headline: 'Exclude the last mutation group',
-      textLines: ['Click × beside the last group in the highlighted annotation panel. Its reads are excluded and the summary statistics update. Other groups stay locked during this step.'],
+      textLines: ['Click × beside Group 5 to exclude it and update the summary.'],
       targetSelector: '#guide-annotation-panel', interactiveAction: 'exclude_group',
       actionPromptText: 'Click × beside Group 5', actionSuccessText: 'Group excluded. Notice its crossed-out row and the updated counts.',
       nextButtonText: 'Next: Restore the Group ▶'
     },
     {
       id: 'result-restore-group', stageName: 'Restore Curation', headline: 'Restore the excluded group',
-      textLines: ['Click ↩ beside the excluded group. Its reads and the original editing profile return. Curating changes only this view, not the underlying analysis.'],
+      textLines: ['Click ↩ to restore the group and its reads.'],
       targetSelector: '#guide-annotation-panel', interactiveAction: 'restore_group',
       actionPromptText: 'Click ↩ beside the excluded group', actionSuccessText: 'Group restored. The original counts are back.',
       nextButtonText: 'Next: Compare References ▶'
     },
 
     {
-      id: 'result-homeo-open', stageName: 'Optional Comparison', headline: 'Keep results beside a comparison',
-      textLines: ['Click Add Homeo Analysis beside Create Curated View to keep both results side by side. CPC and TRY are unrelated toy references used here only to demonstrate the controls.'],
-      targetSelector: '#guide-open-homeo', interactiveAction: 'homeo_open',
-      actionPromptText: 'Click Add Homeo Analysis', actionSuccessText: 'Both result windows are available.', nextButtonText: 'Next: Choose a Combination ▶'
+      id: 'result-homeo-open', stageName: 'Optional Analysis', headline: 'Explore Homeolog analysis',
+      textLines: ['Available in Homeolog mode. Open the comparison and try different references and targets to compare editing profiles.'],
+      targetSelector: '#guide-open-homeo', nextButtonText: 'Next: Figure workspace ▶'
     },
     {
-      id: 'result-homeo-select', stageName: 'Choose a Combination', headline: 'Compare only the references you select',
-      textLines: ['Deselect TRY. The selected-reference count and read-level summary update immediately. This does not estimate same-cell co-editing or knockout probability.'],
-      targetSelector: '#guide-homeo-reference-picker', interactiveAction: 'homeo_select',
-      actionPromptText: 'Click TRY to leave CPC selected', actionSuccessText: 'Combination updated without rerunning analysis.', nextButtonText: 'Next: Build a Figure ▶'
-    },
-    {
-      id: 'result-figure-homeo', stageName: 'Figure Panels', headline: 'Make a figure from this combination',
-      textLines: ['Click Homoeolog figure below the comparison. Four panels appear automatically. In the editor, choose any reference or Homeo combination before adding more panels.'],
-      targetSelector: '#guide-homeo-figure', interactiveAction: 'figure_homeo',
-      actionPromptText: 'Open Figure to see all four panels', actionSuccessText: 'Comparison panel added to the figure draft.', nextButtonText: 'Next: Both Figure Editors ▶'
-    },
-    {
-      id: 'result-figure-both', stageName: 'Figure Workspace', headline: 'Two independent figure cards',
-      textLines: ['Click Analysis figure below Results. Its four default panels appear immediately. Both editors accept individual references or Homeo combinations; new additions keep their own source.'],
-      targetSelector: '#guide-standard-figure', interactiveAction: 'figure_both',
-      actionPromptText: 'Open Analysis figure to see all four panels', actionSuccessText: 'Both figure drafts have their own card.', nextButtonText: 'Next: Export Reports ▶'
+      id: 'result-figure-homeo', stageName: 'Optional Figures', headline: 'Explore the figure workspace',
+      textLines: ['Open Figure below a results card. Choose a reference or Homeolog combination, then try adding, arranging or removing panels.'],
+      targetSelector: '#guide-homeo-figure', nextButtonText: 'Next: Export reports ▶'
     },
 
     // ── R6. Export Excel Reports ──
@@ -1567,13 +1532,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Export Reports',
       headline: 'Export Multi-Sheet Excel Reports',
       textLines: [
-        '• CasMANGO generates publication-ready Excel reports containing per-file scopes, read-flow summaries, and high-resolution chart images.',
-        '• If you curated the data, "Export Curated" includes full curation exclusion records and adjusted statistics alongside original data.'
+        '• Excel reports contain per-file results, read-flow summaries and charts.',
+        '• Export Curated includes the adjusted results and exclusion record.'
       ],
       targetSelector: '#guide-export-excel-btn',
       interactiveAction: 'click_export',
       actionPromptText: 'Click Export to preview the report workflow. No file will be saved during this guide.',
-      actionSuccessText: 'Example report prepared in memory. No file downloaded.',
+      actionSuccessText: 'Report ready.',
       nextButtonText: 'Next: Reproduce in Result Viewer ▶'
     },
 
@@ -1583,7 +1548,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Result Viewer',
       headline: 'Reproduce Results in Result Viewer',
       textLines: [
-        'Click the highlighted empty drop zone to restore the exported example report. Outside the guide, click or drop your own Excel report here.'
+        'Click the drop zone to open the result report.'
       ],
       targetSelector: '#guide-viewer-dropzone',
       interactiveAction: 'switch_to_viewer',
@@ -1658,14 +1623,20 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   get currentStepTargetSelector(): string | undefined {
     const step = this.currentStep;
-    if (step.id === 'result-figure-homeo' && document.querySelector('#guide-homeo-figure[aria-pressed="true"]')) return '#guide-add-homeo-panel';
+    if (step.id === 'workspace-search' && document.querySelector('#guide-workspace-search-help-panel')) return '#guide-workspace-find-region';
+    if (step.id === 'result-homeo-open' && document.querySelector('#guide-open-homeo[aria-pressed="true"]')) return '#guide-homeo-result-pane';
+    if (step.id === 'result-figure-homeo') {
+      if (document.querySelector('#guide-homeo-figure[aria-pressed="true"]')) return '#guide-homeo-figure-pane';
+      if (document.querySelector('#guide-standard-figure[aria-pressed="true"]')) return '#guide-analysis-figure-pane';
+      return document.querySelector('#guide-open-homeo[aria-pressed="true"]') ? '#guide-homeo-figure' : '#guide-standard-figure';
+    }
     if (step.id === 'result-figure-both' && document.querySelector('#guide-standard-figure[aria-pressed="true"]')) return '#guide-add-standard-panel';
     if (step.id === 'result-viewer-reproduce' && this.viewerLoaded) return '#resultsSection';
     if (['workspace-align', 'workspace-reads'].includes(step.id) && this.isCurrentActionCompleted) return '#guide-workspace-viewer';
     if (step.id === 'benchmark-run' && this.isCurrentActionCompleted) return '#guide-bench-results';
     if (step.id === 'benchmark-normalization-mode' && this.isCurrentActionCompleted) return '#guide-bench-normalization-params';
     if (step.id === 'benchmark-normalize' && this.isCurrentActionCompleted) return '#guide-bench-normalization-results';
-    if (step.id === 'result-curation' && this.state.isCuratedView) return '#guide-annotation-panel';
+    if (step.id === 'result-curation' && this.state.isCuratedView) return '#guide-exit-curate-btn';
     if (step.id === 'result-export-report' && this.state.isCuratedView) return '#guide-export-curated-btn';
     if (step.id === 'file-upload' && this.demoFilesLoaded) {
       return '#guide-upload-section';
@@ -1778,8 +1749,16 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   // The spotlight is visual only. Enforce interaction rules at capture phase,
   // before Angular handlers, including keyboard activation and drag/drop.
+  private get isOptionalExploration(): boolean {
+    return this.guideMode === 'result' && ['result-homeo-open', 'result-figure-homeo'].includes(this.currentStep.id);
+  }
+
   private allowedSelectors(): string[] {
     if (this.pendingAction) return [];
+    if (this.isOptionalExploration) return [
+      '#guide-open-homeo', '.homeo-pane', '.figure-pane', '.workspace-rail',
+      '#guide-standard-figure', '.gene-tab-btn', '.scope-tab-btn'
+    ];
     switch (this.currentStep.id) {
       case 'analysis-tabs': return this.guideTabCreated ? [] : ['#guide-add-tab-btn'];
       case 'file-upload': return this.demoFilesLoaded ? [] : ['#guide-upload-zone'];
@@ -1842,7 +1821,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       // A tutorial click must not start the normal drag-to-delete sweep.
       event.preventDefault(); event.stopImmediatePropagation(); return;
     }
-    const permitted = !['contextmenu', 'dblclick', 'dragstart', 'dragover', 'drop'].includes(event.type)
+    const permitted = (!['contextmenu', 'dblclick', 'dragstart', 'dragover', 'drop'].includes(event.type)
+      || (this.isOptionalExploration && ['dragstart', 'dragover', 'drop'].includes(event.type) && !!target.closest('.panel-item')))
       && this.allowedSelectors().some(selector => target.closest(selector));
     if (!permitted) {
       event.preventDefault(); event.stopImmediatePropagation();
@@ -1880,7 +1860,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     const target = event.target as HTMLElement;
     if (!target) return;
 
-    if (['result-homeo-open', 'result-homeo-select', 'result-figure-homeo', 'result-figure-both'].includes(this.currentStep.id)) {
+    if (this.isOptionalExploration) {
       this.later(() => {
         this.revealResultTarget();
         this.cdr.detectChanges(); this.updateLayoutInstant();
@@ -1972,8 +1952,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         this.curationTested = true;
         this.cdr.detectChanges();
         this.later(() => {
-          this.updateLayoutInstant();
-        }, 250);
+          if (this.state.isCuratedView) this.nextStep();
+          else this.updateLayoutInstant();
+        }, 80);
       }
     }
 
@@ -2516,7 +2497,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       rescueAmbiguous: false,
       dataType: 'Single-Target CPC Amplicon (Figure 2)',
       fileCount: 1,
-      sequencingPlatform: 'nanopore'
+      sequencingPlatform: 'nanopore', homoeologMode: true
     };
 
     return addTryExample({ params, scopes });
@@ -2529,7 +2510,6 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     const step = this.currentStep;
     if (step.id === 'result-homeo-open') {
       this.clickInternally('#guide-merged-results');
-      if (document.querySelector('#guide-open-homeo[aria-pressed="true"]')) this.clickInternally('#guide-open-homeo');
     }
     if (step.id === 'result-homeo-select') {
       if (!document.querySelector('#guide-open-homeo[aria-pressed="true"]')) this.clickInternally('#guide-open-homeo');
@@ -2803,7 +2783,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     const dialogHeight = dialogEl ? dialogEl.offsetHeight : 280;
     const docWidth = document.documentElement.clientWidth || window.innerWidth;
     const vh = window.innerHeight;
-    const cardWidth = Math.min(800, Math.max(0, docWidth - 32));
+    let cardWidth = Math.min(800, Math.max(0, docWidth - 32));
     const gap = 24;
 
     let cTop = 0;
@@ -2856,6 +2836,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       eY = topRoom >= dialogHeight + 12 ? cTop + dialogHeight : cTop;
     }
 
+    if (this.isOptionalExploration && el.matches('.workspace-pane')) {
+      const leftRoom = clientRect.left - 32;
+      const rightRoom = docWidth - clientRect.right - 32;
+      if (Math.max(leftRoom, rightRoom) >= 300) {
+        cardWidth = Math.min(640, Math.max(leftRoom, rightRoom));
+        cLeft = leftRoom >= rightRoom ? 16 : clientRect.right + 16;
+        cTop = scrollY + Math.max(72, Math.min(vh - dialogHeight - 16, clientRect.top + 24));
+      }
+    }
     // Clamp horizontally to page bounds
     cLeft = Math.max(16, Math.min(docWidth - cardWidth - 16, cLeft));
     eX = Math.max(cLeft + 60, Math.min(cLeft + cardWidth - 60, sX));

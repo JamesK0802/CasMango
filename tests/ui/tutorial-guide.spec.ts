@@ -112,17 +112,25 @@ describe('guided interaction boundaries', () => {
 
   it('reduces Sequence Viewer to import, align and search with real completion gates', () => {
     const { guide, nodes } = setup(); guide.guideMode = 'workspace';
-    expect(guide.workspaceSteps.map(s => s.id)).toEqual(['workspace-reads', 'workspace-align', 'workspace-search', 'workspace-final']);
-    guide.currentStepIndex = 1;
+    expect(guide.workspaceSteps.map(s => s.id)).toEqual(['workspace-overview', 'workspace-reads', 'workspace-align', 'workspace-search', 'workspace-final']);
+    guide.currentStepIndex = 2;
     expect(guide.isCurrentActionCompleted).toBe(false);
     const allowed = event(['#guide-workspace-run-align']); (guide as any).guardInteraction(allowed);
     expect(allowed.preventDefault).not.toHaveBeenCalled();
     nodes.set('#guide-workspace-reads[data-aligned="true"]', {});
     expect(guide.isCurrentActionCompleted).toBe(true);
-    guide.currentStepIndex = 2;
+    guide.currentStepIndex = 3;
     expect(guide.isCurrentActionCompleted).toBe(false);
     nodes.set('#guide-workspace-reads[data-guide-search-complete="true"]', {});
     expect(guide.isCurrentActionCompleted).toBe(true);
+  });
+
+  it('includes the search explanation in the spotlight while help is open', () => {
+    const { guide, nodes } = setup(); guide.guideMode = 'workspace';
+    guide.currentStepIndex = guide.workspaceSteps.findIndex(s => s.id === 'workspace-search');
+    expect(guide.currentStepTargetSelector).toBe('#guide-workspace-search');
+    nodes.set('#guide-workspace-search-help-panel', {});
+    expect(guide.currentStepTargetSelector).toBe('#guide-workspace-find-region');
   });
 
   it('allows only generated blob download links outside the highlighted action', () => {
@@ -378,31 +386,32 @@ describe('Results guide entry and readiness', () => {
     expect(state.loadResultData).not.toHaveBeenCalled(); expect(guide.viewerLoaded).toBe(false);
   });
 
-  it('requires actually opening comparison and selecting a combination, not an unrelated result action', () => {
+  it('allows optional Homeolog exploration without mandatory clicks', () => {
+    const { guide } = setup(); step(guide, 'result-homeo-open', 'result');
+    expect(guide.isCurrentActionCompleted).toBe(true);
+    for (const selector of ['#guide-open-homeo', '.homeo-pane', '.workspace-rail', '.gene-tab-btn']) {
+      const e = event([selector]); (guide as any).guardInteraction(e);
+      expect(e.preventDefault).not.toHaveBeenCalled();
+    }
+    const unrelated = event(['#guide-export-curated-btn']); (guide as any).guardInteraction(unrelated);
+    expect(unrelated.preventDefault).toHaveBeenCalled();
+    expect(guide.resultSteps.map(s => s.id)).not.toContain('result-homeo-select');
+  });
+
+  it('highlights the opened result rather than its close button', () => {
     const { guide, nodes } = setup(); step(guide, 'result-homeo-open', 'result');
-    expect(guide.isCurrentActionCompleted).toBe(false);
-    const blocked = event(['#guide-standard-figure']); (guide as any).guardInteraction(blocked); expect(blocked.preventDefault).toHaveBeenCalled();
-    nodes.set('#guide-open-homeo[aria-pressed="true"]', {}); expect(guide.isCurrentActionCompleted).toBe(true);
-    step(guide, 'result-homeo-select', 'result'); expect(guide.isCurrentActionCompleted).toBe(false);
-    nodes.set('#guide-homeo-comparison[data-selection-count="1"] #guide-homeo-second-reference[aria-pressed="false"]', {});
-    expect(guide.isCurrentActionCompleted).toBe(true);
+    expect(guide.currentStepTargetSelector).toBe('#guide-open-homeo');
+    nodes.set('#guide-open-homeo[aria-pressed="true"]', {});
+    expect(guide.currentStepTargetSelector).toBe('#guide-homeo-result-pane');
   });
 
-  it('requires the four seeded figure panels and locks unrelated controls', () => {
+  it('lets users explore Figure controls and reorder panels without a task gate', () => {
     const { guide, nodes } = setup(); step(guide, 'result-figure-homeo', 'result');
-    expect((guide as any).allowedSelectors()).toEqual(['#guide-homeo-figure']);
-    nodes.set('#guide-homeo-figure[aria-pressed="true"]', {});
-    expect((guide as any).allowedSelectors()).toEqual(['#guide-add-homeo-panel']);
-    expect(guide.currentStepTargetSelector).toBe('#guide-add-homeo-panel');
-    const blocked = event(['.figure-settings']); (guide as any).guardInteraction(blocked); expect(blocked.preventDefault).toHaveBeenCalled();
-    nodes.set('[data-figure-source="homoeolog"]', { getAttribute: () => '4' });
-    expect(guide.isCurrentActionCompleted).toBe(true); expect((guide as any).allowedSelectors()).toEqual([]);
-  });
-
-  it('requires a standard panel and an independent homeo figure card', () => {
-    const { guide, nodes } = setup(); step(guide, 'result-figure-both', 'result');
-    nodes.set('[data-figure-source="standard"]', { getAttribute: () => '4' });
-    expect(guide.isCurrentActionCompleted).toBe(false); nodes.set('#guide-homeo-figure-pane:not([hidden])', {});
     expect(guide.isCurrentActionCompleted).toBe(true);
+    const e = event(['.figure-pane', '.panel-item'], 'dragstart'); (guide as any).guardInteraction(e);
+    expect(e.preventDefault).not.toHaveBeenCalled();
+    nodes.set('#guide-homeo-figure[aria-pressed="true"]', {});
+    expect(guide.currentStepTargetSelector).toBe('#guide-homeo-figure-pane');
+    expect(guide.resultSteps.map(s => s.id)).not.toContain('result-figure-both');
   });
 });

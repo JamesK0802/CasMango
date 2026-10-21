@@ -9,12 +9,12 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
   selector: 'app-figure-composer', standalone: true, imports: [CommonModule, FormsModule],
   template: `
     <section class="composer" [attr.data-figure-source]="origin" [attr.data-panel-count]="panels.length">
-      <header><div><h3>{{ origin === 'standard' ? 'Standard' : 'Homoeolog' }} figure</h3><small>Independent figure draft · source data stays unchanged</small></div></header>
+      <header><div><h3>{{ origin === 'standard' ? 'Standard' : 'Homeolog' }} figure</h3><small>Independent figure draft · source data stays unchanged</small></div></header>
       <div class="source-picker">
         <label>Source<select aria-label="Figure source" [(ngModel)]="sourceChoice" (ngModelChange)="chooseSource()">
           <option value="">Choose a reference or Homeo</option>
           <option *ngFor="let gene of genes" [value]="'ref:' + gene.gene">{{ gene.gene }}</option>
-          <option value="homeo">Homoeolog combination</option>
+          <option value="homeo">Homeolog combination</option>
         </select></label>
         <label>Target<select aria-label="Figure target" [(ngModel)]="targetChoice" (ngModelChange)="chooseSource()">
           <option *ngFor="let target of targetChoices" [value]="target">{{ target }}</option>
@@ -62,7 +62,7 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
         <small>{{ panels.length }}/12 panels · source captured when added</small>
         <div><button type="button" [disabled]="!panels.length || exporting" (click)="downloadSvg()">SVG</button>
         <button type="button" [disabled]="!panels.length || exporting" (click)="downloadPng()">{{ exporting ? 'Rendering…' : 'PNG 2×' }}</button></div>
-      </footer><p class="error" *ngIf="error" role="alert">{{ error }}</p>
+      </footer><p *ngIf="exportPreviewMessage" role="status">{{ exportPreviewMessage }}</p><p class="error" *ngIf="error" role="alert">{{ error }}</p>
     </section>`,
   styles: [`
     :host{display:block;min-width:0}*{box-sizing:border-box}.composer{padding:18px;background:var(--color-surface,#fff);color:var(--color-text-primary,#1e293b)}
@@ -81,6 +81,8 @@ export class FigureComposerComponent implements OnChanges {
   @Input() source: FigureSource = { label: '', rows: [] };
   @Input() genes: GeneResult[] = [];
   @Input() active = false;
+  @Input() previewOnly = false;
+  exportPreviewMessage = '';
   sourceChoice = '';
   targetChoice = '';
   selectedRefs: string[] = [];
@@ -151,8 +153,9 @@ export class FigureComposerComponent implements OnChanges {
     link.href = url; link.download = `CasMANGO-${this.origin}-figure.${extension}`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  downloadSvg() { if (this.panels.length) this.save(new Blob([this.svg], { type: 'image/svg+xml;charset=utf-8' }), 'svg'); }
+  downloadSvg() { if (this.previewOnly) { this.exportPreviewMessage = 'Export preview only — no file downloaded.'; return; } if (this.panels.length) this.save(new Blob([this.svg], { type: 'image/svg+xml;charset=utf-8' }), 'svg'); }
   async downloadPng() {
+    if (this.previewOnly) { this.exportPreviewMessage = 'Export preview only — no file downloaded.'; return; }
     if (!this.panels.length || this.exporting) return;
     this.exporting = true; this.error = '';
     const url = URL.createObjectURL(new Blob([this.svg], { type: 'image/svg+xml;charset=utf-8' }));
