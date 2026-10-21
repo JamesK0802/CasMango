@@ -1,8 +1,6 @@
 <div class="analysis-page">
   <!-- ══════════════ ANALYSIS TAB BAR ══════════════ -->
   <ng-template #analysisSessions>
-  <div class="analysis-session-switcher" [class.compact]="state.genes.length > 0" [class.expanded]="sessionTabsOpen">
-  <button *ngIf="state.genes.length > 0" type="button" class="session-trigger" [attr.aria-expanded]="sessionTabsOpen" aria-controls="guide-tabs-bar" (click)="sessionTabsOpen = !sessionTabsOpen"><span>{{ state.currentTab?.name || 'Analysis' }}</span><span class="session-chevron" aria-hidden="true" [class.open]="sessionTabsOpen">⌄</span></button>
   <div class="analysis-tabs-bar" id="guide-tabs-bar" (keydown.escape)="sessionTabsOpen = false">
     <div class="tabs-scroll-container">
       <div *ngFor="let tab of state.tabs"
@@ -27,11 +25,15 @@
     </div>
     <button type="button" class="btn-add-tab" id="guide-add-tab-btn" (click)="state.addTab()" [disabled]="state.isAnalysisRunning" [title]="state.isAnalysisRunning ? 'Finish or cancel the current analysis first' : 'New Analysis Tab'">+</button>
   </div>
-  </div>
   </ng-template>
   <ng-container *ngIf="state.genes.length === 0" [ngTemplateOutlet]="analysisSessions"></ng-container>
 
-  <app-result-dashboard *ngIf="state.genes.length > 0"><div result-session-menu><ng-container [ngTemplateOutlet]="analysisSessions"></ng-container></div></app-result-dashboard>
+  <app-result-dashboard *ngIf="state.genes.length > 0">
+    <div result-session-tabs *ngIf="sessionTabsOpen" class="session-expanded-tabs"><ng-container [ngTemplateOutlet]="analysisSessions"></ng-container></div>
+    <div result-session-menu>
+      <button type="button" class="session-trigger" [attr.aria-expanded]="sessionTabsOpen" aria-controls="guide-tabs-bar" (click)="sessionTabsOpen = !sessionTabsOpen"><span>{{ state.currentTab?.name || 'Analysis' }}</span><span class="session-chevron" aria-hidden="true" [class.open]="sessionTabsOpen">⌄</span></button>
+    </div>
+  </app-result-dashboard>
 
   <!-- ══════════════ CONFIGURATION FORM ══════════════ -->
   <form [formGroup]="state.analysisForm" (ngSubmit)="runAnalysis()"
