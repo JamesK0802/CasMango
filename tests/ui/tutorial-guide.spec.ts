@@ -351,4 +351,32 @@ describe('Results guide entry and readiness', () => {
     resolve({ scopes: [{ genes: [] }] }); await task;
     expect(state.loadResultData).not.toHaveBeenCalled(); expect(guide.viewerLoaded).toBe(false);
   });
+
+  it('requires actually opening comparison and selecting a combination, not an unrelated result action', () => {
+    const { guide, nodes } = setup(); step(guide, 'result-homeo-open', 'result');
+    expect(guide.isCurrentActionCompleted).toBe(false);
+    const blocked = event(['#guide-standard-figure']); (guide as any).guardInteraction(blocked); expect(blocked.preventDefault).toHaveBeenCalled();
+    nodes.set('#guide-open-homeo[aria-pressed="true"]', {}); expect(guide.isCurrentActionCompleted).toBe(true);
+    step(guide, 'result-homeo-select', 'result'); expect(guide.isCurrentActionCompleted).toBe(false);
+    nodes.set('#guide-homeo-comparison[data-selection-count="1"] #guide-homeo-second-reference[aria-pressed="false"]', {});
+    expect(guide.isCurrentActionCompleted).toBe(true);
+  });
+
+  it('guides figure opening and panel addition as two real actions and locks other controls', () => {
+    const { guide, nodes } = setup(); step(guide, 'result-figure-homeo', 'result');
+    expect((guide as any).allowedSelectors()).toEqual(['#guide-homeo-figure']);
+    nodes.set('#guide-homeo-figure[aria-pressed="true"]', {});
+    expect((guide as any).allowedSelectors()).toEqual(['#guide-add-homeo-panel']);
+    expect(guide.currentStepTargetSelector).toBe('#guide-add-homeo-panel');
+    const blocked = event(['.figure-settings']); (guide as any).guardInteraction(blocked); expect(blocked.preventDefault).toHaveBeenCalled();
+    nodes.set('[data-figure-source="homoeolog"]', { getAttribute: () => '1' });
+    expect(guide.isCurrentActionCompleted).toBe(true); expect((guide as any).allowedSelectors()).toEqual([]);
+  });
+
+  it('requires a standard panel and the stacked layout to complete the two-editor step', () => {
+    const { guide, nodes } = setup(); step(guide, 'result-figure-both', 'result');
+    nodes.set('[data-figure-source="standard"]', { getAttribute: () => '1' });
+    expect(guide.isCurrentActionCompleted).toBe(false); nodes.set('.stacked-editors', {});
+    expect(guide.isCurrentActionCompleted).toBe(true);
+  });
 });

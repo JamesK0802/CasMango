@@ -33,7 +33,7 @@ export interface GuideStep {
   isPrereq?: boolean;
   isFinal?: boolean;
   nextButtonText?: string;
-  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer' | 'workspace_map' | 'workspace_features' | 'workspace_reads' | 'bench_load' | 'bench_run' | 'bench_normalization' | 'bench_mates' | 'bench_normalize';
+  interactiveAction?: 'create_guide_tab' | 'load_demo_files' | 'open_autofill' | 'load_demo_targets' | 'open_window_check' | 'test_curation' | 'exclude_group' | 'restore_group' | 'switch_reference' | 'click_export' | 'switch_to_viewer' | 'workspace_map' | 'workspace_features' | 'workspace_reads' | 'bench_load' | 'bench_run' | 'bench_normalization' | 'bench_mates' | 'bench_normalize' | 'homeo_open' | 'homeo_select' | 'figure_homeo' | 'figure_both';
   actionPromptText?: string;
   actionSuccessText?: string;
 }
@@ -1585,7 +1585,32 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       textLines: ['Click ↩ beside the excluded group. Its reads and the original editing profile return. Curating changes only this view, not the underlying analysis.'],
       targetSelector: '#guide-annotation-panel', interactiveAction: 'restore_group',
       actionPromptText: 'Click ↩ beside the excluded group', actionSuccessText: 'Group restored. The original counts are back.',
-      nextButtonText: 'Next: Export Reports ▶'
+      nextButtonText: 'Next: Compare References ▶'
+    },
+
+    {
+      id: 'result-homeo-open', stageName: 'Optional Comparison', headline: 'Keep results beside a comparison',
+      textLines: ['Open Homoeolog comparison without replacing Standard. CPC and TRY are unrelated toy references used here only to demonstrate the controls.'],
+      targetSelector: '#guide-open-homeo', interactiveAction: 'homeo_open',
+      actionPromptText: 'Open Homoeolog comparison', actionSuccessText: 'Both result windows are available.', nextButtonText: 'Next: Choose a Combination ▶'
+    },
+    {
+      id: 'result-homeo-select', stageName: 'Choose a Combination', headline: 'Compare only the references you select',
+      textLines: ['Deselect TRY. The selected-reference count and read-level summary update immediately. This does not estimate same-cell co-editing or knockout probability.'],
+      targetSelector: '#guide-homeo-reference-picker', interactiveAction: 'homeo_select',
+      actionPromptText: 'Click TRY to leave CPC selected', actionSuccessText: 'Combination updated without rerunning analysis.', nextButtonText: 'Next: Build a Figure ▶'
+    },
+    {
+      id: 'result-figure-homeo', stageName: 'Figure Panels', headline: 'Make a figure from this combination',
+      textLines: ['Click Figure in the comparison header, then + Add panel. The figure captures this selection without changing results. Use the left window rail to move between results, comparison and figure; only two fit side by side.'],
+      targetSelector: '#guide-homeo-figure', interactiveAction: 'figure_homeo',
+      actionPromptText: 'Open Figure, then add a mutation-profile panel', actionSuccessText: 'Comparison panel added to the figure draft.', nextButtonText: 'Next: Both Figure Editors ▶'
+    },
+    {
+      id: 'result-figure-both', stageName: 'Figure Workspace', headline: 'Two figure editors, stacked vertically',
+      textLines: ['Open the Standard Figure using the toolbar, then add its panel. Both editors share one workspace column, stacked top and bottom. Titles, panel order and layout can be changed; SVG and PNG exports are available outside this guided step.'],
+      targetSelector: '#guide-standard-figure', interactiveAction: 'figure_both',
+      actionPromptText: 'Open Standard Figure, then add its panel', actionSuccessText: 'Both independent figure drafts are visible in one column.', nextButtonText: 'Next: Export Reports ▶'
     },
 
     // ── R6. Export Excel Reports ──
@@ -1685,6 +1710,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   get currentStepTargetSelector(): string | undefined {
     const step = this.currentStep;
+    if (step.id === 'result-figure-homeo' && document.querySelector('#guide-homeo-figure[aria-pressed="true"]')) return '#guide-add-homeo-panel';
+    if (step.id === 'result-figure-both' && document.querySelector('#guide-standard-figure[aria-pressed="true"]')) return '#guide-add-standard-panel';
     if (step.id === 'result-viewer-reproduce' && this.viewerLoaded) return '#resultsSection';
     if (['workspace-map', 'workspace-features', 'workspace-reads'].includes(step.id) && this.isCurrentActionCompleted) return '#guide-workspace-viewer';
     if (step.id === 'benchmark-run' && this.isCurrentActionCompleted) return '#guide-bench-results';
@@ -1718,6 +1745,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'test_curation':
         return this.state.isCuratedView;
       case 'switch_reference': return this.state.currentGene?.gene === 'TRY';
+      case 'homeo_open': return !!document.querySelector('#guide-open-homeo[aria-pressed="true"]');
+      case 'homeo_select': return !!document.querySelector('#guide-homeo-comparison[data-selection-count="1"] #guide-homeo-second-reference[aria-pressed="false"]');
+      case 'figure_homeo': return Number(document.querySelector('[data-figure-source="homoeolog"]')?.getAttribute('data-panel-count') || 0) > 0;
+      case 'figure_both': return Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) > 0 && !!document.querySelector('.stacked-editors');
       case 'exclude_group': return this.excludedExample;
       case 'restore_group': return this.restoredExample;
       case 'click_export':
@@ -1806,6 +1837,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'autofill-panel': return this.demoTargetsLoaded ? [] : ['#guide-autofill-upload-btn'];
       case 'window-check': return this.windowCheckOpened ? [] : ['#guide-window-check-btn'];
       case 'result-references': return ['.gene-tab-btn[data-curation-key="TRY"]'];
+      case 'result-homeo-open': return this.isCurrentActionCompleted ? [] : ['#guide-open-homeo'];
+      case 'result-homeo-select': return this.isCurrentActionCompleted ? [] : ['#guide-homeo-second-reference'];
+      case 'result-figure-homeo': return this.isCurrentActionCompleted ? [] : [document.querySelector('#guide-homeo-figure[aria-pressed="true"]') ? '#guide-add-homeo-panel' : '#guide-homeo-figure'];
+      case 'result-figure-both': return this.isCurrentActionCompleted ? [] : [document.querySelector('#guide-standard-figure[aria-pressed="true"]') ? '#guide-add-standard-panel' : '#guide-standard-figure'];
       case 'result-curation': return this.state.isCuratedView ? [] : ['#guide-curate-btn'];
       case 'result-exclude-group': return this.excludedExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-restore-group': return this.restoredExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
@@ -1891,6 +1926,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private onCaptureClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
     if (!target) return;
+
+    if (['result-homeo-open', 'result-homeo-select', 'result-figure-homeo', 'result-figure-both'].includes(this.currentStep.id)) {
+      this.later(() => {
+        document.querySelector(this.currentStepTargetSelector!)?.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+        this.cdr.detectChanges(); this.updateLayoutInstant();
+      }, 300);
+    }
 
     if (['result-exclude-group', 'result-restore-group'].includes(this.currentStep.id)) {
       event.preventDefault(); event.stopImmediatePropagation();
@@ -2484,6 +2526,21 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
    */
   private handleStepSideEffects() {
     const step = this.currentStep;
+    if (step.id === 'result-homeo-open') {
+      this.clickInternally('#guide-merged-results');
+      if (document.querySelector('#guide-open-homeo[aria-pressed="true"]')) this.clickInternally('#guide-open-homeo');
+    }
+    if (step.id === 'result-homeo-select') {
+      if (!document.querySelector('#guide-open-homeo[aria-pressed="true"]')) this.clickInternally('#guide-open-homeo');
+      this.clickInternally('#guide-homeo-select-all');
+    }
+    if (step.id === 'result-export-report') {
+      this.clickInternally('#guide-close-figure');
+      if (document.querySelector('#guide-open-homeo[aria-pressed="true"]')) this.clickInternally('#guide-open-homeo');
+    }
+    if (['result-homeo-open', 'result-homeo-select', 'result-figure-homeo', 'result-figure-both'].includes(step.id)) {
+      this.later(() => document.querySelector(this.currentStepTargetSelector!)?.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' }), 100);
+    }
     if (step.id === 'result-viewer-reproduce' && !this.viewerPrepared) {
       this.restorePreview = { slot: this.state.viewerSlot, config: this.state.curationConfig,
         curated: this.state.isCuratedView, original: this.state.originalSlotSnapshot };

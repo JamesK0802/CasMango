@@ -5,7 +5,10 @@ import { takeUntil } from 'rxjs/operators';
 import { AppStateService } from '../../services/app-state.service';
 import { Chart } from 'chart.js/auto';
 
-import { MutationGroup } from '../../models/analysis.model';
+import { FigureComposerComponent } from './figure-composer.component';
+import { HomoeologComparisonComponent } from './homoeolog-comparison.component';
+import { comparisonRows, FigureSource, withoutExcludedGroups } from './result-presentation';
+import { GeneResult, MutationGroup } from '../../models/analysis.model';
 import { resolveAnnotationCutSite } from './annotation-cut-site';
 import { groupKey } from '../../models/curation.model';
 import { CurationItem, CurationItemKind, CurationSweep, curationRange } from '../../models/curation-sweep';
@@ -13,7 +16,7 @@ import { CurationItem, CurationItemKind, CurationSweep, curationRange } from '..
 @Component({
   selector: 'app-result-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FigureComposerComponent, HomoeologComparisonComponent],
   templateUrl: './result-dashboard.component.html',
   styleUrl: './result-dashboard.component.css'
 })
@@ -22,9 +25,102 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   mobileActionsOpen = false;
   mobileGeneInfoOpen = false;
   mobileChartsOpen = false;
-  resultView: 'standard' | 'homoeolog' = 'standard';
-  selectedHomoeologGroup = '';
-  selectedHomoeologTarget = '';
+  homoeologOpen = false;
+  standardFigureOpen = false;
+  homoeologFigureOpen = false;
+  activeWorkspacePane = 'standard';
+  @ViewChild('workspaceTrack') workspaceTrack?: ElementRef<HTMLElement>;
+  @ViewChild(HomoeologComparisonComponent) comparison?: HomoeologComparisonComponent;
+  private workspaceSwipe: { x: number; pointerId: number } | null = null;
+  private chartTimer?: ReturnType<typeof setTimeout>;
+  private dashboardDestroyed = false;
+  private presentationCache?: { genes: GeneResult[]; exclusions: string; projected: GeneResult[] };
+
+  get hasHomoeologResults(): boolean {
+    return this.state.normalGenes.length > 1 || Boolean(this.state.lastRunParams?.homoeologMode);
+  }
+  get showHomoeolog(): boolean { return this.homoeologOpen && this.hasHomoeologResults; }
+  get showFigure(): boolean { return this.standardFigureOpen || this.homoeologFigureOpen; }
+  get presentationGenes() {
+    const genes = this.state.genes;
+    const excluded = this.state.isCuratedView ? this.state.curationConfig?.excludedGroups ?? [] : [];
+    const key = JSON.stringify(excluded);
+    if (this.presentationCache?.genes !== genes || this.presentationCache.exclusions !== key) {
+      this.presentationCache = { genes, exclusions: key, projected: withoutExcludedGroups(genes.filter(g => !g.is_ambiguous_derived && !g.is_rescued_derived), excluded) };
+    }
+    return this.presentationCache.projected;
+  }
+  get workspacePanes(): string[] { return ['standard', ...(this.showHomoeolog ? ['homoeolog'] : []), ...(this.showFigure ? ['figure'] : [])]; }
+  get scopeLabel(): string {
+    const file = this.state.allFileResults[this.state.selectedScopeIndex];
+    const name = this.state.selectedScopeIndex === -1 ? 'All merged' : (file?.fastq_file?.split('/').pop() || 'Results');
+    return name + (this.state.isCuratedView ? ' · Curated' : '');
+  }
+  get standardFigureSource(): FigureSource {
+    const current = this.state.currentGene;
+    const gene = current ? withoutExcludedGroups([current], this.state.isCuratedView ? this.state.curationConfig?.excludedGroups : [])[0] : null;
+    const target = this.state.selectedTarget;
+    return { label: this.scopeLabel + ' · ' + (gene?.gene || '') + ' · ' + (target?.target_id || ''),
+      rows: gene && target ? comparisonRows([gene], [gene.gene], target.target_id) : [] };
+  }
+  get homoeologFigureSource(): FigureSource { return this.comparison?.figureSource ?? { label: '', rows: [] }; }
+  toggleHomoeolog(): void {
+    this.homoeologOpen = !this.showHomoeolog;
+    if (!this.homoeologOpen) this.homoeologFigureOpen = false;
+    this.cdr.detectChanges(); this.focusWorkspace(this.homoeologOpen ? 'homoeolog' : 'standard');
+  }
+  toggleFigure(origin: 'standard' | 'homoeolog'): void {
+    if (origin === 'standard') this.standardFigureOpen = !this.standardFigureOpen;
+    else this.homoeologFigureOpen = !this.homoeologFigureOpen;
+    this.cdr.detectChanges(); this.focusWorkspace(this.showFigure ? 'figure' : (this.showHomoeolog ? 'homoeolog' : 'standard'));
+  }
+  focusWorkspace(pane: string): void {
+    const track = this.workspaceTrack?.nativeElement;
+    const panels = track ? (Array.from(track.children) as HTMLElement[]).filter(element => !element.hidden) : [];
+    const index = Math.max(0, this.workspacePanes.indexOf(pane));
+    const twoVisible = !!track && panels.length > 1 && panels[0].clientWidth < track.clientWidth * .75;
+    const start = Math.min(index, Math.max(0, panels.length - (twoVisible ? 2 : 1)));
+    if (track && panels[start]) track.scrollTo({ left: panels[start].offsetLeft - panels[0].offsetLeft, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    this.activeWorkspacePane = pane;
+    setTimeout(() => this.resizeStandardCharts(), 250);
+  }
+  onWorkspaceScroll(): void {
+    const track = this.workspaceTrack?.nativeElement;
+    const first = track?.firstElementChild as HTMLElement | null;
+    if (!track || !first) return;
+    const index = Math.round(track.scrollLeft / (first.clientWidth + 16));
+    this.activeWorkspacePane = this.workspacePanes[Math.min(index, this.workspacePanes.length - 1)];
+  }
+  beginWorkspaceSwipe(event: PointerEvent): void {
+    if ((event.target as HTMLElement).closest('button, input, select, a') || event.button !== 0) return;
+    this.workspaceSwipe = { x: event.clientX, pointerId: event.pointerId };
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  }
+  endWorkspaceSwipe(event: PointerEvent): void {
+    if (!this.workspaceSwipe || event.pointerId !== this.workspaceSwipe.pointerId) return;
+    const delta = event.clientX - this.workspaceSwipe.x; this.workspaceSwipe = null;
+    if (Math.abs(delta) < 50) return;
+    // Navigate the visible pair, not the last rail button clicked. At the right
+    // edge, Homeo + Figure must return to Standard + Homeo in one gesture.
+    const track = this.workspaceTrack?.nativeElement;
+    const first = track?.firstElementChild as HTMLElement | null;
+    const current = track && first ? Math.round(track.scrollLeft / (first.clientWidth + 16)) : 0;
+    this.focusWorkspace(this.workspacePanes[Math.max(0, Math.min(this.workspacePanes.length - 1, current + (delta < 0 ? 1 : -1)))]);
+  }
+  cancelWorkspaceSwipe(): void { this.workspaceSwipe = null; }
+  inspectHomoeolog(name: string): void {
+    const index = this.state.genes.findIndex(g => g.gene === name);
+    if (index < 0) return;
+    this.state.selectedGeneIndex = index;
+    const targetId = this.comparison?.activeTarget;
+    this.state.selectedRowIndex = Math.max(0, this.state.genes[index].analysis_result.targets.findIndex(t => t.target_id === targetId));
+    this.refreshDashboard(); this.focusWorkspace('standard');
+  }
+  @HostListener('window:resize')
+  resizeStandardCharts(): void {
+    if (this.dashboardDestroyed) return;
+    for (const id of ['mutationPieChart', 'indelChart', 'donutChart']) Chart.getChart(id)?.resize();
+  }
 
   isDraggingScroll = false;
   startX = 0;
@@ -233,6 +329,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
 
 
   ngOnInit() {
+    this.homoeologOpen = Boolean(this.state.lastRunParams?.homoeologMode);
     this.state.resultsUpdated$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       this.refreshDashboard();
     });
@@ -245,6 +342,8 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   ngOnDestroy() {
+    this.dashboardDestroyed = true;
+    clearTimeout(this.chartTimer);
     this.cancelCurationSweep();
     this.destroy$.next();
     this.destroy$.complete();
@@ -262,263 +361,6 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     this.state.selectedScopeIndex = index;
     this.state.updateVisibleGenes();
     this.refreshDashboard();
-  }
-
-  get hasHomoeologResults(): boolean {
-    return Boolean(this.state.lastRunParams?.homoeologMode) && this.state.normalGenes.length > 0;
-  }
-
-  get homoeologGroupIds(): string[] {
-    return [...new Set(this.state.normalGenes.map(gene => gene.homoeolog_group || 'Homoeolog'))];
-  }
-
-  get activeHomoeologGroup(): string {
-    const groups = this.homoeologGroupIds;
-    if (!groups.includes(this.selectedHomoeologGroup)) this.selectedHomoeologGroup = groups[0] || 'Homoeolog';
-    return this.selectedHomoeologGroup;
-  }
-
-  get homoeologGenes() {
-    const group = this.activeHomoeologGroup;
-    return this.state.normalGenes.filter(gene => (gene.homoeolog_group || 'Homoeolog') === group);
-  }
-
-  get homoeologTargetIds(): string[] {
-    return [...new Set(this.homoeologGenes.flatMap(gene => (gene.analysis_result?.targets || []).map(target => target.target_id)))];
-  }
-
-  homoeologMutationFilter: 'all' | 'oof' | 'inframe' | 'sub' = 'all';
-
-  get activeHomoeologTarget(): string {
-    return this.homoeologTargetIds.includes(this.selectedHomoeologTarget)
-      ? this.selectedHomoeologTarget
-      : (this.homoeologTargetIds[0] || '');
-  }
-
-  setHomoeologMutationFilter(filter: 'all' | 'oof' | 'inframe' | 'sub'): void {
-    if (this.homoeologMutationFilter === filter) return;
-    this.homoeologMutationFilter = filter;
-    this.refreshHomoeologView();
-  }
-
-  getHomoeologTargetRate(target: any | null | undefined): number {
-    if (!target?.summary) return 0;
-    const sum = target.summary;
-    switch (this.homoeologMutationFilter) {
-      case 'oof':
-        return Number(sum.out_of_frame_pct ?? 0);
-      case 'inframe':
-        return Number(sum.in_frame_pct ?? 0);
-      case 'sub':
-        return Number(sum.substitution_pct ?? 0);
-      case 'all':
-      default:
-        return Number(sum.editing_efficiency ?? sum.indel_editing_efficiency ?? 0);
-    }
-  }
-
-  get homoeologRows() {
-    const targetFilter = this.activeHomoeologTarget;
-    return this.homoeologGenes.flatMap(gene => (gene.analysis_result?.targets || [])
-      .filter(target => target.target_id === targetFilter)
-      .map(target => ({ gene, target })));
-  }
-
-  get homoeologMeanEditing(): number {
-    const values = this.homoeologRows.map(row => this.getHomoeologTargetRate(row.target));
-    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-  }
-
-  get homoeologEditingSpread(): number {
-    const values = this.homoeologRows.map(row => this.getHomoeologTargetRate(row.target));
-    return values.length ? Math.max(...values) - Math.min(...values) : 0;
-  }
-
-  get homoeologAssignedReads(): number {
-    return this.homoeologRows.reduce((sum, row) => sum + Number(row.target.summary?.aligned_reads || 0), 0);
-  }
-
-  get homoeologCoEditStats(): {
-    rates: { name: string; rate: number }[];
-    pBoth: number;
-    pAtLeastOne: number;
-    pNone: number;
-    pSingle: number;
-    parityScore: number;
-    biasRatio: number;
-    biasDominant: string;
-    pairBreakdown: { label: string; pct: number; color: string }[];
-  } {
-    const rows = this.homoeologRows;
-    const rates = rows.map(r => ({
-      name: r.gene.gene,
-      rate: Math.max(0, Math.min(100, this.getHomoeologTargetRate(r.target)))
-    }));
-
-    if (rates.length === 0) {
-      return {
-        rates: [],
-        pBoth: 0,
-        pAtLeastOne: 0,
-        pNone: 100,
-        pSingle: 0,
-        parityScore: 100,
-        biasRatio: 1,
-        biasDominant: 'Equal',
-        pairBreakdown: []
-      };
-    }
-
-    if (rates.length === 2) {
-      const eA = rates[0].rate / 100;
-      const eB = rates[1].rate / 100;
-      const pBoth = (eA * eB) * 100;
-      const pOnlyA = (eA * (1 - eB)) * 100;
-      const pOnlyB = ((1 - eA) * eB) * 100;
-      const pNone = ((1 - eA) * (1 - eB)) * 100;
-      const pAtLeastOne = (1 - (1 - eA) * (1 - eB)) * 100;
-      const pSingle = pOnlyA + pOnlyB;
-
-      const maxRate = Math.max(rates[0].rate, rates[1].rate);
-      const minRate = Math.min(rates[0].rate, rates[1].rate);
-      const parityScore = maxRate > 0 ? (minRate / maxRate) * 100 : 100;
-      const biasRatio = minRate > 0 ? (maxRate / minRate) : (maxRate > 0 ? 999 : 1);
-      const biasDominant = rates[0].rate > rates[1].rate ? rates[0].name : (rates[1].rate > rates[0].rate ? rates[1].name : 'Equal');
-
-      const pairBreakdown = [
-        { label: `Both Edited (${rates[0].name}+ / ${rates[1].name}+)`, pct: pBoth, color: '#0072B2' },
-        { label: `Only ${rates[0].name} (${rates[0].name}+ / ${rates[1].name}⁻)`, pct: pOnlyA, color: '#65a30d' },
-        { label: `Only ${rates[1].name} (${rates[0].name}⁻ / ${rates[1].name}+)`, pct: pOnlyB, color: '#0ea5e9' },
-        { label: `Wild-Type (${rates[0].name}⁻ / ${rates[1].name}⁻)`, pct: pNone, color: '#cbd5e1' }
-      ];
-
-      return { rates, pBoth, pAtLeastOne, pNone, pSingle, parityScore, biasRatio, biasDominant, pairBreakdown };
-    }
-
-    // N >= 3 or N == 1
-    const fracEdited = rates.map(r => r.rate / 100);
-    const pBoth = fracEdited.reduce((acc, f) => acc * f, 1) * 100;
-    const pNone = fracEdited.reduce((acc, f) => acc * (1 - f), 1) * 100;
-    const pAtLeastOne = 100 - pNone;
-    const pSingle = Math.max(0, pAtLeastOne - pBoth);
-
-    const numericRates = rates.map(r => r.rate);
-    const maxR = Math.max(...numericRates);
-    const minR = Math.min(...numericRates);
-    const parityScore = maxR > 0 ? (minR / maxR) * 100 : 100;
-    const biasRatio = minR > 0 ? (maxR / minR) : (maxR > 0 ? 999 : 1);
-    const dominantGene = rates.find(r => r.rate === maxR)?.name || 'Equal';
-
-    const pairBreakdown = [
-      { label: `All Homoeologs Edited`, pct: pBoth, color: '#0072B2' },
-      { label: `Partial Homoeologs Edited`, pct: pSingle, color: '#65a30d' },
-      { label: `Wild-Type (All Unedited)`, pct: pNone, color: '#cbd5e1' }
-    ];
-
-    return { rates, pBoth, pAtLeastOne, pNone, pSingle, parityScore, biasRatio, biasDominant: dominantGene, pairBreakdown };
-  }
-
-  get homoeologSharedAlleles(): {
-    alleleKey: string;
-    netIndel: number;
-    classification: string;
-    isShared: boolean;
-    genesPresent: string[];
-    homoeologFrequencies: { geneName: string; pct: number }[];
-    meanFrequency: number;
-  }[] {
-    const rows = this.homoeologRows;
-    if (rows.length === 0) return [];
-
-    const alleleMap = new Map<string, {
-      netIndel: number;
-      classification: string;
-      freqs: Map<string, number>;
-    }>();
-
-    for (const { gene, target } of rows) {
-      const topGroups: MutationGroup[] = target.top_groups || [];
-      for (const group of topGroups) {
-        if (!group.read_inner) continue;
-        const key = `${group.classification} [${group.net_indel >= 0 ? '+' : ''}${group.net_indel}bp]`;
-        if (!alleleMap.has(key)) {
-          alleleMap.set(key, {
-            netIndel: group.net_indel,
-            classification: group.classification,
-            freqs: new Map<string, number>()
-          });
-        }
-        const item = alleleMap.get(key)!;
-        const currentPct = item.freqs.get(gene.gene) || 0;
-        item.freqs.set(gene.gene, Math.max(currentPct, Number(group.read_pct || 0)));
-      }
-    }
-
-    const geneNames = rows.map(r => r.gene.gene);
-    const result: {
-      alleleKey: string;
-      netIndel: number;
-      classification: string;
-      isShared: boolean;
-      genesPresent: string[];
-      homoeologFrequencies: { geneName: string; pct: number }[];
-      meanFrequency: number;
-    }[] = [];
-
-    alleleMap.forEach((val, key) => {
-      const genesPresent = Array.from(val.freqs.keys());
-      const isShared = genesPresent.length > 1;
-      const homoeologFrequencies = geneNames.map(g => ({
-        geneName: g,
-        pct: val.freqs.get(g) || 0
-      }));
-      const totalFreq = homoeologFrequencies.reduce((sum, h) => sum + h.pct, 0);
-      const meanFrequency = totalFreq / geneNames.length;
-
-      result.push({
-        alleleKey: key,
-        netIndel: val.netIndel,
-        classification: val.classification,
-        isShared,
-        genesPresent,
-        homoeologFrequencies,
-        meanFrequency
-      });
-    });
-
-    return result.sort((a, b) => {
-      if (a.isShared !== b.isShared) return a.isShared ? -1 : 1;
-      return b.meanFrequency - a.meanFrequency;
-    }).slice(0, 15);
-  }
-
-  switchResultView(view: 'standard' | 'homoeolog'): void {
-    if (view === 'homoeolog' && !this.hasHomoeologResults) return;
-    this.resultView = view;
-    this.state.destroyCharts();
-    this.cdr.detectChanges();
-    setTimeout(() => view === 'homoeolog' ? this.updateHomoeologCharts() : this.refreshDashboard(), 32);
-  }
-
-  selectHomoeologGroup(group: string): void {
-    this.selectedHomoeologGroup = group;
-    this.selectedHomoeologTarget = '';
-    this.refreshHomoeologView();
-  }
-
-  selectHomoeologTarget(target: string): void {
-    this.selectedHomoeologTarget = target;
-    this.refreshHomoeologView();
-  }
-
-  private refreshHomoeologView(): void {
-    this.state.destroyCharts();
-    this.cdr.detectChanges();
-    setTimeout(() => this.updateHomoeologCharts(), 32);
-  }
-
-  homoeologTarget(gene: any, targetId: string): any | null {
-    return (gene.analysis_result?.targets || []).find((target: any) => target.target_id === targetId) || null;
   }
 
   onMobileScopeChange(event: Event) {
@@ -572,18 +414,13 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
       matched: item.target.summary?.aligned_reads ?? 0,
       outOfFrame: item.target.summary?.out_of_frame_pct ?? 0,
       inFrame: item.target.summary?.in_frame_pct ?? 0,
-      noIndel: item.target.summary?.no_indel_pct ?? 0,
+      noIndel: comparisonRows([this.state.currentGene!], [this.state.currentGene!.gene], item.target.target_id)[0]?.wt ?? 0,
       substitution: item.target.summary?.substitution_pct ?? 0
     }));
   }
 
   refreshDashboard() {
     this.ngZone.run(() => {
-      if (this.resultView === 'homoeolog' && this.hasHomoeologResults) {
-        this.cdr.detectChanges();
-        setTimeout(() => this.updateHomoeologCharts(), 32);
-        return;
-      }
       const gene = this.state.currentGene;
       if (!gene?.analysis_result?.targets?.length) return;
       const targets = gene.analysis_result.targets;
@@ -610,7 +447,9 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
 
       this.cdr.detectChanges();
 
-      setTimeout(() => {
+      clearTimeout(this.chartTimer);
+      this.chartTimer = setTimeout(() => {
+        if (this.dashboardDestroyed) return;
         this.ngZone.run(() => {
           this.updateChartsForSelected();
           this.centerAnnotation();
@@ -689,96 +528,6 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
           }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: `Indel Editing (${selectedData.target_id})` } } }
-      }));
-    }
-  }
-
-  private updateHomoeologCharts(): void {
-    if (this.resultView !== 'homoeolog') return;
-    this.state.destroyCharts();
-    const targetId = this.activeHomoeologTarget;
-    if (!targetId) return;
-    const genes = this.homoeologGenes.filter(gene => this.homoeologTarget(gene, targetId));
-    const geneLabels = genes.map(gene => gene.gene);
-
-    const editingCanvas = document.getElementById('homoeologEditingChart') as HTMLCanvasElement | null;
-    if (editingCanvas) {
-      const metricLabel = this.homoeologMutationFilter === 'oof' ? 'Out-of-Frame %' :
-                           this.homoeologMutationFilter === 'inframe' ? 'In-Frame %' :
-                           this.homoeologMutationFilter === 'sub' ? 'Substitution %' : 'Editing Efficiency %';
-      const metricColor = this.homoeologMutationFilter === 'oof' ? '#E69F00' :
-                          this.homoeologMutationFilter === 'inframe' ? '#0072B2' :
-                          this.homoeologMutationFilter === 'sub' ? '#CC79A7' : '#0072B2';
-
-      this.state.addChart(new Chart(editingCanvas, {
-        type: 'bar',
-        data: {
-          labels: geneLabels,
-          datasets: [{
-            label: metricLabel,
-            data: genes.map(gene => {
-              const target = this.homoeologTarget(gene, targetId);
-              return this.getHomoeologTargetRate(target);
-            }),
-            backgroundColor: metricColor,
-            borderRadius: 6,
-          }]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Rate (%)' } } },
-          plugins: { legend: { display: false }, title: { display: true, text: `${targetId} · ${metricLabel}` } }
-        }
-      }));
-    }
-
-    const coverageCanvas = document.getElementById('homoeologCoverageChart') as HTMLCanvasElement | null;
-    if (coverageCanvas) {
-      this.state.addChart(new Chart(coverageCanvas, {
-        type: 'bar',
-        data: {
-          labels: geneLabels,
-          datasets: [
-            { label: 'Unmodified', data: genes.map(gene => {
-              const summary = this.homoeologTarget(gene, targetId)?.summary;
-              return Math.max(0, Number(summary?.no_indel_pct ?? 0) - Number(summary?.substitution_pct ?? 0));
-            }), backgroundColor: '#009E73' },
-            { label: 'Substitution', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.substitution_pct ?? 0)), backgroundColor: '#CC79A7' },
-            { label: 'In-frame', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.in_frame_pct ?? 0)), backgroundColor: '#0072B2' },
-            { label: 'Out-of-frame', data: genes.map(gene => Number(this.homoeologTarget(gene, targetId)?.summary?.out_of_frame_pct ?? 0)), backgroundColor: '#E69F00' }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, max: 100, title: { display: true, text: 'Reads (%)' } } },
-          plugins: { legend: { position: 'bottom' }, title: { display: true, text: `${targetId} · Mutation Profile` } }
-        }
-      }));
-    }
-
-    const coEditCanvas = document.getElementById('homoeologCoEditChart') as HTMLCanvasElement | null;
-    if (coEditCanvas) {
-      const coStats = this.homoeologCoEditStats;
-      const breakdown = coStats.pairBreakdown.filter(item => item.pct > 0.05);
-      this.state.addChart(new Chart(coEditCanvas, {
-        type: 'doughnut',
-        data: {
-          labels: breakdown.map(b => b.label),
-          datasets: [{
-            data: breakdown.map(b => Number(b.pct.toFixed(2))),
-            backgroundColor: breakdown.map(b => b.color),
-            borderWidth: 2,
-            borderColor: '#ffffff'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-            title: { display: true, text: `${targetId} · Joint Knockout / Edit Distribution` }
-          }
-        }
       }));
     }
   }

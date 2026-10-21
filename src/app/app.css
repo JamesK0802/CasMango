@@ -138,6 +138,9 @@
   padding: 20px;
 }
 
+/* Use available desktop space only when an optional result companion is open. */
+.crispr-body:has(.result-workspace.has-companions) { max-width: 1800px; }
+
 .header-section {
   display: flex;
   justify-content: space-between;

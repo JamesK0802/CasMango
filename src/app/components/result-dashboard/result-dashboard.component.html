@@ -102,12 +102,25 @@
     <p>All items are excluded. Restore some files, genes, targets, or groups to see results.</p>
   </div>
 
-  <div class="result-view-switch" *ngIf="hasHomoeologResults">
-    <button type="button" [class.active]="resultView === 'standard'" (click)="switchResultView('standard')">Standard</button>
-    <button type="button" [class.active]="resultView === 'homoeolog'" (click)="switchResultView('homoeolog')">Homoeolog</button>
+  <div class="workspace-toolbar" id="guide-result-workspace-tools">
+    <span class="workspace-label">RESULTS WORKSPACE</span>
+    <button type="button" *ngIf="hasHomoeologResults" id="guide-open-homeo" [attr.aria-pressed]="showHomoeolog" [class.active]="showHomoeolog" (click)="toggleHomoeolog()">Homoeolog comparison {{ showHomoeolog ? '−' : '+' }}</button>
+    <button type="button" id="guide-standard-figure" [attr.aria-pressed]="standardFigureOpen" [class.active]="standardFigureOpen" (click)="toggleFigure('standard')">Figure {{ standardFigureOpen ? '−' : '+' }}</button>
   </div>
-
-  <div class="standard-result-view" [hidden]="resultView === 'homoeolog'">
+  <div class="result-workspace" [class.has-companions]="workspacePanes.length > 1">
+    <nav class="workspace-rail" *ngIf="workspacePanes.length > 1" aria-label="Result workspace windows">
+      <button type="button" *ngFor="let pane of workspacePanes" [class.active]="activeWorkspacePane === pane" [attr.aria-label]="'Show ' + pane + ' window'" [attr.aria-pressed]="activeWorkspacePane === pane" (click)="focusWorkspace(pane)">
+        <span class="mini-window" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>{{ pane === 'homoeolog' ? 'Homeo' : pane === 'standard' ? 'Results' : 'Figure' }}</span>
+      </button>
+    </nav>
+    <div class="workspace-track" #workspaceTrack [class.single-pane]="workspacePanes.length === 1" (scroll)="onWorkspaceScroll()">
+      <section class="workspace-pane standard-pane" aria-label="Standard results">
+        <header class="workspace-pane-header" (pointerdown)="beginWorkspaceSwipe($event)" (pointerup)="endWorkspaceSwipe($event)" (pointercancel)="cancelWorkspaceSwipe()">
+          <div><strong>Standard results</strong><small>Drag this header or use the window rail</small></div>
+          <button type="button" [attr.aria-pressed]="standardFigureOpen" (click)="toggleFigure('standard')">Figure {{ standardFigureOpen ? '−' : '+' }}</button>
+        </header>
+        <div class="standard-result-view workspace-pane-body">
 
   <!-- ── Result Scope Tabs (Merged vs Per-File) ── -->
   <p class="curation-sweep-hint" *ngIf="state.isCuratedView">Hold × and drag across items, scroll while holding, or Shift-click a range.</p>
@@ -115,7 +128,7 @@
 
   <div class="result-scope-wrapper" *ngIf="state.isMultiReference && state.allFileResults.length > 1">
     <div class="scope-tabs" [class.curatable-strip]="state.isCuratedView">
-      <button type="button" class="scope-tab-btn" [class.active]="state.selectedScopeIndex === -1"
+      <button type="button" class="scope-tab-btn" id="guide-merged-results" [class.active]="state.selectedScopeIndex === -1"
         (click)="selectScope(-1)">
         All Merged
       </button>
@@ -253,7 +266,7 @@
     </div>
     <div class="metric-card no-indel">
       <span class="m-label">Unmodified %</span>
-      <span class="m-value">{{ (state.metrics.avgNoIndel - state.metrics.avgSubstitution) | number:'1.1-2' }}%</span>
+      <span class="m-value">{{ standardFigureSource.rows[0]?.wt ?? 0 | number:'1.1-2' }}%</span>
     </div>
     <div class="metric-card sub">
       <span class="m-label">Substitution %</span>
@@ -646,122 +659,24 @@
 </div>
 </div>
 
-  <div class="homoeolog-result-view" *ngIf="resultView === 'homoeolog' && hasHomoeologResults">
-    <!-- Target Selector (Only if multiple targets exist) -->
-    <div class="homo-filter-row" *ngIf="homoeologTargetIds.length > 1">
-      <div class="homo-chip-set targets">
-        <button type="button" *ngFor="let target of homoeologTargetIds"
-          [class.active]="activeHomoeologTarget === target" (click)="selectHomoeologTarget(target)">{{ target }}</button>
-      </div>
-    </div>
-
-    <!-- Overview Metrics Grid -->
-    <div class="metrics-grid homo-metrics-grid">
-      <div class="metric-card">
-        <span class="m-label">References</span>
-        <span class="m-value">{{ homoeologGenes.length }}</span>
-      </div>
-      <div class="metric-card">
-        <span class="m-label">Aligned Reads</span>
-        <span class="m-value">{{ homoeologAssignedReads | number }}</span>
-      </div>
-      <div class="metric-card">
-        <span class="m-label">Mean Editing</span>
-        <span class="m-value">{{ homoeologMeanEditing | number:'1.1-2' }}%</span>
-      </div>
-      <div class="metric-card out-of-frame">
-        <span class="m-label">Concomitant Edit</span>
-        <span class="m-value">{{ homoeologCoEditStats.pBoth | number:'1.1-2' }}%</span>
-      </div>
-      <div class="metric-card in-frame">
-        <span class="m-label">Single Homoeolog</span>
-        <span class="m-value">{{ homoeologCoEditStats.pSingle | number:'1.1-2' }}%</span>
-      </div>
-      <div class="metric-card sub">
-        <span class="m-label">Parity Index</span>
-        <span class="m-value">{{ homoeologCoEditStats.parityScore | number:'1.1-2' }}%</span>
-      </div>
-    </div>
-
-    <!-- Charts Section -->
-    <div class="charts-section homo-charts-section">
-      <div class="chart-card"><canvas id="homoeologEditingChart"></canvas></div>
-      <div class="chart-card"><canvas id="homoeologCoverageChart"></canvas></div>
-      <div class="chart-card donut"><canvas id="homoeologCoEditChart"></canvas></div>
-    </div>
-
-    <!-- Comparison Summary Table -->
-    <div class="table-card">
-      <h3>Homoeolog Summary Table
-        <span class="table-gene-badge">{{ activeHomoeologTarget }}</span>
-      </h3>
-      <div class="table-responsive">
-        <table class="summary-table">
-          <thead>
-            <tr>
-              <th>Reference</th>
-              <th>Total Reads</th>
-              <th>Aligned Reads</th>
-              <th>Total Editing</th>
-              <th>Out-of-Frame</th>
-              <th>In-Frame</th>
-              <th>Substitution</th>
-              <th>Unmodified</th>
-            </tr>
-          </thead>
-          <tbody>
-            <ng-container *ngFor="let gene of homoeologGenes">
-              <tr *ngIf="homoeologTarget(gene, activeHomoeologTarget) as target">
-                <td><strong>{{ gene.gene }}</strong></td>
-                <td>{{ target.summary?.total_reads ?? 0 | number }}</td>
-                <td>{{ target.summary?.aligned_reads ?? 0 | number }}</td>
-                <td><strong>{{ (target.summary?.editing_efficiency ?? target.summary?.indel_editing_efficiency ?? 0) | number:'1.1-2' }}%</strong></td>
-                <td><span class="highlight-oof">{{ target.summary?.out_of_frame_pct ?? 0 | number:'1.1-2' }}%</span></td>
-                <td>{{ target.summary?.in_frame_pct ?? 0 | number:'1.1-2' }}%</td>
-                <td>{{ target.summary?.substitution_pct ?? 0 | number:'1.1-2' }}%</td>
-                <td>{{ ((target.summary?.no_indel_pct ?? 0) - (target.summary?.substitution_pct ?? 0)) | number:'1.1-2' }}%</td>
-              </tr>
-            </ng-container>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Shared vs Unique Repair Alleles -->
-    <div class="table-card" *ngIf="homoeologSharedAlleles.length > 0">
-      <h3>Shared & Subgenome-Specific Alleles
-        <span class="table-gene-badge">{{ activeHomoeologTarget }}</span>
-      </h3>
-      <div class="table-responsive">
-        <table class="summary-table">
-          <thead>
-            <tr>
-              <th>Repair Pattern</th>
-              <th>Net Indel</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th *ngFor="let gene of homoeologGenes">{{ gene.gene }}</th>
-              <th>Mean Freq</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let allele of homoeologSharedAlleles">
-              <td class="font-mono"><strong>{{ allele.alleleKey }}</strong></td>
-              <td>{{ allele.netIndel > 0 ? '+' : '' }}{{ allele.netIndel }} bp</td>
-              <td><span class="badge">{{ allele.classification }}</span></td>
-              <td>
-                <span class="badge" [style.background-color]="allele.isShared ? 'var(--color-success-bg)' : 'var(--color-surface-alt)'" [style.color]="allele.isShared ? 'var(--color-success)' : 'var(--color-text-secondary)'">
-                  {{ allele.isShared ? 'Shared' : 'Unique' }}
-                </span>
-              </td>
-              <td *ngFor="let freq of allele.homoeologFrequencies">
-                {{ freq.pct > 0 ? (freq.pct | number:'1.1-2') + '%' : '-' }}
-              </td>
-              <td><strong>{{ allele.meanFrequency | number:'1.1-2' }}%</strong></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      </section>
+      <section class="workspace-pane homeo-pane" [hidden]="!showHomoeolog" aria-label="Homoeolog comparison">
+        <header class="workspace-pane-header" (pointerdown)="beginWorkspaceSwipe($event)" (pointerup)="endWorkspaceSwipe($event)" (pointercancel)="cancelWorkspaceSwipe()">
+          <div><strong>Homoeolog comparison</strong><small>Only the combination you select</small></div>
+          <div class="pane-header-actions"><button type="button" id="guide-homeo-figure" [attr.aria-pressed]="homoeologFigureOpen" (click)="toggleFigure('homoeolog')">Figure {{ homoeologFigureOpen ? '−' : '+' }}</button><button type="button" (click)="toggleHomoeolog()" aria-label="Close homoeolog comparison">×</button></div>
+        </header>
+        <div class="workspace-pane-body"><app-homoeolog-comparison [genes]="presentationGenes" [scopeLabel]="scopeLabel" (inspect)="inspectHomoeolog($event)" /></div>
+      </section>
+      <section class="workspace-pane figure-pane" [hidden]="!showFigure" aria-label="Figure workspace">
+        <header class="workspace-pane-header" (pointerdown)="beginWorkspaceSwipe($event)" (pointerup)="endWorkspaceSwipe($event)" (pointercancel)="cancelWorkspaceSwipe()">
+          <div><strong>Figure workspace</strong><small>Arrange panels · export SVG / PNG</small></div>
+          <button type="button" id="guide-close-figure" (click)="standardFigureOpen = false; homoeologFigureOpen = false; focusWorkspace(showHomoeolog ? 'homoeolog' : 'standard')" aria-label="Close figure workspace">×</button>
+        </header>
+        <div class="figure-editors" [class.stacked-editors]="standardFigureOpen && homoeologFigureOpen">
+          <div class="figure-editor-scroll" [hidden]="!standardFigureOpen"><app-figure-composer origin="standard" [source]="standardFigureSource" /></div>
+          <div class="figure-editor-scroll" [hidden]="!homoeologFigureOpen"><app-figure-composer origin="homoeolog" [source]="homoeologFigureSource" /></div>
+        </div>
+      </section>
     </div>
   </div>
 </div>
