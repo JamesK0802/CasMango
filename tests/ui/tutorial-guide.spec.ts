@@ -363,6 +363,7 @@ describe('Results guide entry and readiness', () => {
     const { guide, state } = setup(); step(guide, 'result-export-report', 'result');
     let resolve!: (file: any) => void; state.exportToExcel = vi.fn(() => new Promise(r => resolve = r));
     const task = (guide as any).exportGuideResult();
+    expect(state.exportToExcel).toHaveBeenCalledWith(false);
     expect(guide.exportTested).toBe(false); expect((guide as any).pendingAction).toBe(true);
     resolve(null); await task;
     expect(guide.exportTested).toBe(false); expect((guide as any).pendingAction).toBe(false);
@@ -387,20 +388,20 @@ describe('Results guide entry and readiness', () => {
     expect(guide.isCurrentActionCompleted).toBe(true);
   });
 
-  it('guides figure opening and panel addition as two real actions and locks other controls', () => {
+  it('requires the four seeded figure panels and locks unrelated controls', () => {
     const { guide, nodes } = setup(); step(guide, 'result-figure-homeo', 'result');
     expect((guide as any).allowedSelectors()).toEqual(['#guide-homeo-figure']);
     nodes.set('#guide-homeo-figure[aria-pressed="true"]', {});
     expect((guide as any).allowedSelectors()).toEqual(['#guide-add-homeo-panel']);
     expect(guide.currentStepTargetSelector).toBe('#guide-add-homeo-panel');
     const blocked = event(['.figure-settings']); (guide as any).guardInteraction(blocked); expect(blocked.preventDefault).toHaveBeenCalled();
-    nodes.set('[data-figure-source="homoeolog"]', { getAttribute: () => '1' });
+    nodes.set('[data-figure-source="homoeolog"]', { getAttribute: () => '4' });
     expect(guide.isCurrentActionCompleted).toBe(true); expect((guide as any).allowedSelectors()).toEqual([]);
   });
 
   it('requires a standard panel and an independent homeo figure card', () => {
     const { guide, nodes } = setup(); step(guide, 'result-figure-both', 'result');
-    nodes.set('[data-figure-source="standard"]', { getAttribute: () => '1' });
+    nodes.set('[data-figure-source="standard"]', { getAttribute: () => '4' });
     expect(guide.isCurrentActionCompleted).toBe(false); nodes.set('#guide-homeo-figure-pane:not([hidden])', {});
     expect(guide.isCurrentActionCompleted).toBe(true);
   });

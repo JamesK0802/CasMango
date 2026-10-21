@@ -44,7 +44,7 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.result-tour]="guideMode === 'result' && !currentStep.isIntro && !currentStep.isFinal" [class.workspace-tour]="guideMode === 'workspace' || (guideMode === 'result' && !currentStep.isIntro && !currentStep.isFinal) || (currentStep.id === 'window-check' && windowCheckOpened)" [class.no-target]="!targetRect" tabindex="-1">
+    <div class="guide-root" [class.workspace-tour]="guideMode === 'workspace'" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
@@ -62,7 +62,7 @@ export interface GuideStep {
 
       <!-- ── Spotlight Cutout with 0% Tint Inside (Clean border without text label) ── -->
       <div class="spotlight-hole"
-           *ngIf="targetRect"
+           *ngIf="targetRect && targetRect.height > 0 && targetRect.width > 0"
            [style.top.px]="targetRect.top - 6"
            [style.left.px]="targetRect.left - 6"
            [style.width.px]="targetRect.width + 12"
@@ -1000,6 +1000,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private savedCuration?: { config: AppStateService['curationConfig']; curated: boolean; original: AppStateService['originalSlotSnapshot']; exported: File | null };
   // Block activation, not native touch scrolling through a long highlighted panel.
   private readonly guardedEvents = ['pointerdown', 'mousedown', 'click', 'dblclick', 'contextmenu', 'dragstart', 'dragover', 'drop', 'keydown', 'focusin'];
+  private boundScroll = () => {
+    if (this.destroyed || this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => { this.rafId = null; if (!this.destroyed) this.updateLayoutInstant(); });
+  };
   private boundInteraction = (event: Event) => this.guardInteraction(event);
 
   steps: GuideStep[] = [
@@ -1268,10 +1272,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'workspace-search', stageName: 'Search reads', headline: 'Find a read by ID or sequence',
-      textLines: ['Type Deletion into the search field to find the −1 bp read. You can also search by sequence motif.'],
+      textLines: ['NGG is filled in. Click ? beside Search to see supported searches, then click Search to find PAM-like motifs. N matches any A/C/G/T base.'],
       targetSelector: '#guide-workspace-search', interactiveAction: 'workspace_search',
-      actionPromptText: 'Search for Deletion',
-      actionSuccessText: 'The deletion read is isolated; its alignment remains visible.',
+      actionPromptText: 'Open ?, then search for NGG',
+      actionSuccessText: 'NGG matching reads found; the alignment remains available.',
       nextButtonText: 'Finish ▶'
     },
     {
@@ -1546,15 +1550,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'result-figure-homeo', stageName: 'Figure Panels', headline: 'Make a figure from this combination',
-      textLines: ['Click Homoeolog figure at the bottom of the comparison card, then + Add panel. A separate figure card opens. With three or more cards, use the window rail to move between them.'],
+      textLines: ['Click Homoeolog figure below the comparison. Four panels appear automatically. In the editor, choose any reference or Homeo combination before adding more panels.'],
       targetSelector: '#guide-homeo-figure', interactiveAction: 'figure_homeo',
-      actionPromptText: 'Open Figure, then add a mutation-profile panel', actionSuccessText: 'Comparison panel added to the figure draft.', nextButtonText: 'Next: Both Figure Editors ▶'
+      actionPromptText: 'Open Figure to see all four panels', actionSuccessText: 'Comparison panel added to the figure draft.', nextButtonText: 'Next: Both Figure Editors ▶'
     },
     {
       id: 'result-figure-both', stageName: 'Figure Workspace', headline: 'Two independent figure cards',
-      textLines: ['Click Analysis figure below Results, then + Add panel. Each editor has its own card; use the rail to switch. SVG / PNG export is available outside the guide.'],
+      textLines: ['Click Analysis figure below Results. Its four default panels appear immediately. Both editors accept individual references or Homeo combinations; new additions keep their own source.'],
       targetSelector: '#guide-standard-figure', interactiveAction: 'figure_both',
-      actionPromptText: 'Open Standard Figure, then add its panel', actionSuccessText: 'Both figure drafts have their own card.', nextButtonText: 'Next: Export Reports ▶'
+      actionPromptText: 'Open Analysis figure to see all four panels', actionSuccessText: 'Both figure drafts have their own card.', nextButtonText: 'Next: Export Reports ▶'
     },
 
     // ── R6. Export Excel Reports ──
@@ -1568,8 +1572,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       ],
       targetSelector: '#guide-export-excel-btn',
       interactiveAction: 'click_export',
-      actionPromptText: 'Click "Export Excel" (or "Export Curated") to download your analysis workbook (.xlsx)',
-      actionSuccessText: 'Excel report downloaded! Click Next to verify Result Viewer.',
+      actionPromptText: 'Click Export to preview the report workflow. No file will be saved during this guide.',
+      actionSuccessText: 'Example report prepared in memory. No file downloaded.',
       nextButtonText: 'Next: Reproduce in Result Viewer ▶'
     },
 
@@ -1691,8 +1695,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'switch_reference': return this.state.currentGene?.gene === 'TRY';
       case 'homeo_open': return !!document.querySelector('#guide-open-homeo[aria-pressed="true"]');
       case 'homeo_select': return !!document.querySelector('#guide-homeo-comparison[data-selection-count="1"] #guide-homeo-second-reference[aria-pressed="false"]');
-      case 'figure_homeo': return Number(document.querySelector('[data-figure-source="homoeolog"]')?.getAttribute('data-panel-count') || 0) > 0;
-      case 'figure_both': return Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) > 0 && !!document.querySelector('#guide-homeo-figure-pane:not([hidden])');
+      case 'figure_homeo': return !!document.querySelector('#guide-homeo-figure[aria-pressed="true"]') && Number(document.querySelector('[data-figure-source="homoeolog"]')?.getAttribute('data-panel-count') || 0) >= 4;
+      case 'figure_both': return Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) >= 4 && !!document.querySelector('#guide-homeo-figure-pane:not([hidden])');
       case 'exclude_group': return this.excludedExample;
       case 'restore_group': return this.restoredExample;
       case 'click_export':
@@ -1750,12 +1754,14 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       if (this.guideMode === 'benchmark') this.startBenchmarkGuide();
     }
     for (const type of this.guardedEvents) window.addEventListener(type, this.boundInteraction, { capture: true, passive: false });
+    window.addEventListener('scroll', this.boundScroll, true);
     (document.activeElement as HTMLElement | null)?.blur();
     this.handleStepSideEffects();
     this.updateLayoutInstant();
   }
 
   ngOnDestroy() {
+    window.removeEventListener('scroll', this.boundScroll, true);
     this.benchmarkUpdates?.unsubscribe();
     document.body?.classList.remove('casmango-guide-active');
     this.destroyed = true;
@@ -1795,7 +1801,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'result-viewer-reproduce': return this.viewerLoaded ? [] : ['#guide-viewer-dropzone'];
       case 'workspace-reads': return this.isCurrentActionCompleted ? [] : ['#guide-workspace-import'];
       case 'workspace-align': return this.isCurrentActionCompleted ? [] : ['#guide-workspace-run-align'];
-      case 'workspace-search': return ['#guide-workspace-search input', '#guide-workspace-search button'];
+      case 'workspace-search': return ['#guide-workspace-search input', '#guide-workspace-search button', '#guide-workspace-search-help', '#guide-workspace-search-help-panel button'];
       case 'benchmark-dataset': return this.isCurrentActionCompleted ? [] : ['#guide-bench-load-classes'];
       case 'benchmark-run': return this.isCurrentActionCompleted ? [] : ['#guide-bench-run'];
       case 'benchmark-normalization-mode': return ['#guide-bench-normalization-btn'];
@@ -2265,7 +2271,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     const originalExport = this.savedCuration?.exported ?? null;
     const mode = this.guideMode, step = this.currentStepIndex;
     try {
-      const file = await (this.state.isCuratedView ? this.state.exportCuratedToExcel() : this.state.exportToExcel());
+      const file = await (this.state.isCuratedView ? this.state.exportCuratedToExcel(false) : this.state.exportToExcel(false));
       if (this.destroyed || this.actionRevision !== revision || this.guideMode !== mode || this.currentStepIndex !== step) {
         if (this.state.lastExportedFile === file) this.state.lastExportedFile = originalExport;
         return;
@@ -2552,6 +2558,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.guideImportError = ''; this.state.resultsUpdated$.next();
     }
     if (this.guideMode === 'workspace') {
+      if (step.id === 'workspace-search') this.later(() => window.dispatchEvent(new CustomEvent('casmango:guide-search-preset')), 50);
       const panel = step.id === 'workspace-reads' && !this.isCurrentActionCompleted ? 'files' : 'viewer';
       if (step.id === 'workspace-align') this.later(() => {
         if (!document.querySelector('#guide-workspace-align-config')) this.clickInternally('#guide-workspace-align-toggle');
@@ -2768,19 +2775,27 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     }
 
     const clientRect = el.getBoundingClientRect();
+    let visibleTop = clientRect.top, visibleBottom = clientRect.bottom;
+    let visibleLeft = clientRect.left, visibleRight = clientRect.right;
+    for (let parent = el.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      const bounds = parent.getBoundingClientRect();
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) { visibleTop = Math.max(visibleTop, bounds.top); visibleBottom = Math.min(visibleBottom, bounds.bottom); }
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) { visibleLeft = Math.max(visibleLeft, bounds.left); visibleRight = Math.min(visibleRight, bounds.right); }
+    }
     const scrollY = window.scrollY || window.pageYOffset || 0;
     const scrollX = window.scrollX || window.pageXOffset || 0;
 
     // Convert target rect to document-absolute coordinates
-    const docTop = clientRect.top + scrollY;
-    const docLeft = clientRect.left + scrollX;
+    const docTop = visibleTop + scrollY;
+    const docLeft = visibleLeft + scrollX;
     const rect = {
       top: docTop,
       left: docLeft,
-      width: clientRect.width,
-      height: clientRect.height,
-      bottom: docTop + clientRect.height,
-      right: docLeft + clientRect.width
+      width: Math.max(0, visibleRight - visibleLeft),
+      height: Math.max(0, visibleBottom - visibleTop),
+      bottom: Math.max(docTop, visibleBottom + scrollY),
+      right: Math.max(docLeft, visibleRight + scrollX)
     };
     this.targetRect = rect;
 
@@ -2828,6 +2843,17 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
         sY = rect.top - 6;
         eY = cTop + dialogHeight;
       }
+    }
+
+    if (this.guideMode === 'result') {
+      // Bubble follows nested card scrolling and stays immediately beside the focus.
+      const topRoom = visibleTop - 72, bottomRoom = vh - visibleBottom - 12;
+      cTop = topRoom >= dialogHeight + 12
+        ? visibleTop + scrollY - dialogHeight - 12
+        : bottomRoom >= dialogHeight + 12 ? visibleBottom + scrollY + 12
+        : scrollY + Math.max(72, Math.min(vh - dialogHeight - 12, visibleTop - dialogHeight - 12));
+      sY = topRoom >= dialogHeight + 12 ? rect.top : rect.bottom;
+      eY = topRoom >= dialogHeight + 12 ? cTop + dialogHeight : cTop;
     }
 
     // Clamp horizontally to page bounds

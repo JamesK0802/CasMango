@@ -44,7 +44,7 @@ export class ExcelExportService {
     right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
   };
 
-  async exportToExcel(params: ExportParams, scopes: ScopeData[], chartImages?: { [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }, curationConfig?: CurationConfig): Promise<File> {
+  async exportToExcel(params: ExportParams, scopes: ScopeData[], chartImages?: { [scopeName: string]: { [targetId: string]: { [chartName: string]: string } } }, curationConfig?: CurationConfig, download = true): Promise<File> {
     const wb = new ExcelJS.Workbook();
 
     // If curated, add a Curation Info sheet first
@@ -80,7 +80,7 @@ export class ExcelExportService {
     const prefix = curationConfig ? 'curated-crispr-report' : 'crispr-analysis-report';
     const fileName = `${prefix}-${ts}.xlsx`;
     const file = new File([buf], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(file, fileName);
+    if (download) saveAs(file, fileName);
     return file;
   }
 

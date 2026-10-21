@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, HostListener, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FastqDocument } from '../../models/sequence.model';
@@ -69,7 +69,7 @@ function buildMotifRegex(query: string): RegExp | null {
   imports: [CommonModule, FormsModule],
   template: `
     <div id="guide-workspace-reads" [attr.data-aligned]="isAlignedActive"
-      [attr.data-guide-search-complete]="isAlignedActive && searchQuery.trim().toLowerCase() === 'deletion' && filteredReads.length === 1" class="fastq-viewer" (scroll)="onViewerScroll($event)">
+      [attr.data-guide-search-complete]="isAlignedActive && searchHelpOpened && searchedGuideMotif && searchQuery.trim().toUpperCase() === 'NGG' && filteredReads.length > 0" class="fastq-viewer" (scroll)="onViewerScroll($event)">
       <div class="reads-panel">
         
         <!-- Compact Top Workspace Bar -->
@@ -99,6 +99,7 @@ function buildMotifRegex(query: string): RegExp | null {
             <div id="guide-workspace-search" class="search-box">
               <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="searchReads()" (keyup.enter)="searchReads()" placeholder="Search ID or motif (e.g. NGG)...">
               <button (click)="searchReads()">Search</button>
+              <button type="button" id="guide-workspace-search-help" class="search-help-toggle" aria-label="Search help" [attr.aria-expanded]="searchHelpOpen" (click)="toggleSearchHelp()">?</button>
               <button (click)="clearSearch()" *ngIf="searchQuery">Clear</button>
             </div>
             <button id="guide-workspace-align-toggle" type="button" class="btn-align-toggle" [class.active]="showAlignPanel" (click)="toggleAlignPanel()">
@@ -108,6 +109,15 @@ function buildMotifRegex(query: string): RegExp | null {
           </div>
         </div>
 
+        <aside id="guide-workspace-search-help-panel" class="search-help-panel" *ngIf="searchHelpOpen" aria-label="Search options">
+          <strong>Search reads</strong>
+          <p>Read ID: partial, case-insensitive text (e.g. WT).</p>
+          <p>Category: WT, deletion, insertion or substitution after alignment.</p>
+          <p>Sequence: DNA motifs including IUPAC codes. N = any base; R = A/G; Y = C/T. NGG finds an N-G-G motif.</p>
+          <p>Search matches the read as displayed, not the reverse complement. Special characters are literal, not regular expressions.</p>
+          <button type="button" (click)="useNggExample()">Use NGG</button>
+          <button type="button" (click)="searchHelpOpen = false">Close</button>
+        </aside>
         <!-- Align Config Panel -->
         <div id="guide-workspace-align-config" class="align-config-panel" *ngIf="showAlignPanel">
           <div class="align-mode-tabs">
@@ -372,6 +382,9 @@ function buildMotifRegex(query: string): RegExp | null {
       gap: 8px;
       align-items: center;
     }
+    .search-help-panel { margin: 8px 0; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #475569; font-size: 12px; }
+    .search-help-panel p { margin: 5px 0; line-height: 1.5; }
+    .search-help-panel button { margin-right: 8px; padding: 5px 9px; border: 1px solid #dbe1e8; border-radius: 6px; background: #f8fafc; cursor: pointer; }
     .search-box {
       display: flex;
       gap: 6px;
@@ -585,10 +598,11 @@ function buildMotifRegex(query: string): RegExp | null {
       font-weight: bold;
     }
 
-    .pad-spaces { white-space: pre; }
-    .seq-flank { color: #94a3b8; }
+    .pad-spaces { white-space: pre; flex-shrink: 0; }
+    .seq-flank { flex-shrink: 0; color: #94a3b8; }
 
     .seq-window-box {
+      flex-shrink: 0;
       display: inline-flex;
       align-items: center;
       background: #ffffff;
@@ -601,6 +615,7 @@ function buildMotifRegex(query: string): RegExp | null {
       align-items: center;
       justify-content: center;
       width: 1ch;
+      flex: 0 0 1ch;
       text-align: center;
       font-family: 'Courier New', Courier, monospace;
     }
@@ -611,7 +626,7 @@ function buildMotifRegex(query: string): RegExp | null {
     .grid-cell.cell-unobserved { color: #cbd5e1; }
     .grid-cell.is-cut-col { border-left: 1px solid rgba(239, 68, 68, 0.4); }
 
-    .ref-cut-badge { position: absolute; top: -11px; font-size: 10px; color: #dc2626; font-weight: bold; }
+    .ref-cut-badge { position: absolute; left: 0; transform: translateX(-50%); top: -11px; font-size: 10px; color: #dc2626; font-weight: bold; }
 
     /* Zero-width absolute superscript badge for insertions */
     .ins-indicator {
@@ -857,6 +872,27 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   filteredReads: ProcessedRead[] = [];
   visibleReads: ProcessedRead[] = [];
   searchQuery = '';
+  searchHelpOpen = false;
+  searchHelpOpened = false;
+  searchedGuideMotif = false;
+  toggleSearchHelp() { this.searchHelpOpen = !this.searchHelpOpen; if (this.searchHelpOpen) this.searchHelpOpened = true; }
+  useNggExample() { this.searchQuery = 'NGG'; this.searchReads(); }
+  @HostListener('window:casmango:guide-search-preset')
+  prepareGuideSearch() {
+    if (!this.document?.name.startsWith('guide_')) return;
+    this.searchQuery = 'NGG'; this.searchHelpOpened = false; this.searchedGuideMotif = false;
+    this.changeDetectorRef.detectChanges();
+  }
+  @HostListener('window:resize')
+  measureCutSite() {
+    const viewport = this.msaViewportRef?.nativeElement as HTMLElement | undefined;
+    const marker = viewport?.querySelector('.reference-seq-row .is-cut-col') as HTMLElement | null;
+    const rows = viewport?.querySelector('.msa-seq-rows-container') as HTMLElement | null;
+    if (marker && rows) {
+      this.cutSiteGuideLeftPx = marker.getBoundingClientRect().left - rows.getBoundingClientRect().left;
+      this.changeDetectorRef.detectChanges();
+    }
+  }
   chunkSize = 10;
   hasMore = false;
   maxPreCutLen = 0;
@@ -900,6 +936,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   selectedReadInfo: ProcessedRead | null = null;
   private loadSentinelRef?: ElementRef<HTMLElement>;
   private loadObserver?: IntersectionObserver;
+  private cutSiteObserver?: ResizeObserver;
 
   constructor(
     private sequenceWorkspaceService: SequenceWorkspaceService,
@@ -950,6 +987,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
 
   ngOnDestroy() {
     this.loadObserver?.disconnect();
+    this.cutSiteObserver?.disconnect();
   }
 
   get alignedReadsList(): ProcessedRead[] {
@@ -1110,6 +1148,12 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     setTimeout(() => {
       if (!this.msaViewportRef) return;
       const el = this.msaViewportRef.nativeElement as HTMLElement;
+      this.measureCutSite();
+      if (typeof ResizeObserver !== 'undefined') {
+        this.cutSiteObserver?.disconnect();
+        this.cutSiteObserver = new ResizeObserver(() => this.measureCutSite());
+        this.cutSiteObserver.observe(el);
+      }
       const targetScrollLeft = Math.max(0, this.cutSiteGuideLeftPx - (el.clientWidth / 2));
       el.scrollLeft = targetScrollLeft;
     }, 60);
@@ -1282,6 +1326,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   }
 
   searchReads() {
+    if (this.searchQuery.trim().toUpperCase() === 'NGG') this.searchedGuideMotif = true;
     this.applyFilterAndPagination();
   }
 

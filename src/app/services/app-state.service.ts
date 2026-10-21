@@ -1207,14 +1207,14 @@ export class AppStateService {
 
   lastExportedFile: File | null = null;
 
-  async exportToExcel(): Promise<File | null> {
+  async exportToExcel(download = true): Promise<File | null> {
     const data = this.getExportData();
     if (!data) return null;
 
     try {
       this.addLog('Generating chart images for export...');
       const images = await this.generateChartImagesForExport(data.scopes);
-      const file = await this.excelExportService.exportToExcel(data.params as any, data.scopes, images);
+      const file = await this.excelExportService.exportToExcel(data.params as any, data.scopes, images, undefined, download);
       this.lastExportedFile = file;
       this.addLog('Excel exported with all diagrams.');
       return file;
@@ -1244,14 +1244,14 @@ export class AppStateService {
     }
   }
 
-  async exportCuratedToExcel(): Promise<File | null> {
+  async exportCuratedToExcel(download = true): Promise<File | null> {
     const data = this.getExportData();
     if (!data) return null;
     try {
       this.addLog('Generating curated result export...');
       const images = await this.generateChartImagesForExport(data.scopes);
       const file = await this.excelExportService.exportToExcel(
-        data.params as any, data.scopes, images, this.curationConfig ?? undefined
+        data.params as any, data.scopes, images, this.curationConfig ?? undefined, download
       );
       this.lastExportedFile = file;
       this.addLog('Curated result Excel exported.');

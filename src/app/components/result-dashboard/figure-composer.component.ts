@@ -1,15 +1,29 @@
 import { Component, Input, OnChanges, ChangeDetectorRef } from '@angular/core';
+import { GeneResult } from '../../models/analysis.model';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { FigureKind, FigureOptions, FigurePanel, FigureSource, captureFigureSource, moveFigurePanel, renderFigure } from './result-presentation';
+import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, captureFigureSource, moveFigurePanel, renderFigure } from './result-presentation';
 
 @Component({
   selector: 'app-figure-composer', standalone: true, imports: [CommonModule, FormsModule],
   template: `
     <section class="composer" [attr.data-figure-source]="origin" [attr.data-panel-count]="panels.length">
       <header><div><h3>{{ origin === 'standard' ? 'Standard' : 'Homoeolog' }} figure</h3><small>Independent figure draft · source data stays unchanged</small></div></header>
-      <div class="source-line">Current source: {{ source.label || 'Select a result' }}</div>
+      <div class="source-picker">
+        <label>Source<select aria-label="Figure source" [(ngModel)]="sourceChoice" (ngModelChange)="chooseSource()">
+          <option value="">Choose a reference or Homeo</option>
+          <option *ngFor="let gene of genes" [value]="'ref:' + gene.gene">{{ gene.gene }}</option>
+          <option value="homeo">Homoeolog combination</option>
+        </select></label>
+        <label>Target<select aria-label="Figure target" [(ngModel)]="targetChoice" (ngModelChange)="chooseSource()">
+          <option *ngFor="let target of targetChoices" [value]="target">{{ target }}</option>
+        </select></label>
+        <div *ngIf="sourceChoice === 'homeo'" class="reference-picker">
+          <button type="button" *ngFor="let gene of genes" [attr.aria-pressed]="selectedRefs.includes(gene.gene)" (click)="toggleReference(gene.gene)">{{ selectedRefs.includes(gene.gene) ? '✓ ' : '' }}{{ gene.gene }}</button>
+        </div>
+      </div>
+      <div class="source-line">Selected source: {{ selectedSource.label || 'Choose a source' }} · new panels only</div>
       <div class="add-row">
         <label class="sr-only" [for]="origin + '-figure-kind'">Panel type</label>
         <select [id]="origin + '-figure-kind'" [(ngModel)]="kind">
@@ -17,7 +31,7 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, captureFigureSour
           <option value="alleles">Cut-site sequences</option><option value="summary">Summary table</option>
         </select>
         <button type="button" class="primary" [attr.id]="origin === 'standard' ? 'guide-add-standard-panel' : 'guide-add-homeo-panel'"
-          [disabled]="!source.rows.length || panels.length >= 12" (click)="addPanel()">+ Add panel</button>
+          [disabled]="!selectedSource.rows.length || panels.length >= 12" (click)="addPanel()">+ Add panel</button>
       </div>
       <details class="figure-settings"><summary>Title & layout</summary>
         <label>Figure title<input [(ngModel)]="options.title" maxlength="120" (ngModelChange)="refresh()"></label>
@@ -53,6 +67,7 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, captureFigureSour
   styles: [`
     :host{display:block;min-width:0}*{box-sizing:border-box}.composer{padding:18px;background:var(--color-surface,#fff);color:var(--color-text-primary,#1e293b)}
     h3{margin:0 0 4px;font-size:16px}small,.source-line{font-size:11px;color:var(--color-text-secondary,#64748b);line-height:1.5}.source-line{margin:15px 0 8px;overflow-wrap:anywhere}
+    .source-picker{display:grid;grid-template-columns:1fr 1fr;gap:8px}.reference-picker{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px}.reference-picker button[aria-pressed="true"]{background:#fffbeb;border-color:#e9b34b}
     .add-row,footer,footer>div,.panel-item{display:flex;align-items:center;gap:7px}.add-row select{flex:1;min-width:0}
     button,input,select{font:inherit;font-size:12px;border:1px solid var(--color-border,#dbe1e8);border-radius:7px;padding:8px;background:var(--color-surface,#fff);color:inherit}
     button{cursor:pointer;white-space:nowrap}button:disabled{opacity:.4;cursor:default}button.primary{background:#f59e0b;border-color:#f59e0b;color:#1e293b;font-weight:600}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
@@ -64,6 +79,34 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, captureFigureSour
 export class FigureComposerComponent implements OnChanges {
   @Input() origin: 'standard' | 'homoeolog' = 'standard';
   @Input() source: FigureSource = { label: '', rows: [] };
+  @Input() genes: GeneResult[] = [];
+  @Input() active = false;
+  sourceChoice = '';
+  targetChoice = '';
+  selectedRefs: string[] = [];
+  private initialized = false;
+  private sourceChosen = false;
+  get targetChoices(): string[] { return [...new Set(this.genes.flatMap(g => g.analysis_result.targets.map(t => t.target_id)))]; }
+  get selectedSource(): FigureSource {
+    if (!this.sourceChosen) return this.source;
+    const names = this.sourceChoice === 'homeo' ? this.selectedRefs : [this.sourceChoice.slice(4)];
+    return { label: names.join(' + ') + ' · ' + this.targetChoice, rows: comparisonRows(this.genes, names, this.targetChoice) };
+  }
+  chooseSource() {
+    if (!this.sourceChoice) return;
+    this.sourceChosen = true;
+    if (!this.initialized) this.seedPanels();
+  }
+  toggleReference(name: string) {
+    this.selectedRefs = this.selectedRefs.includes(name) ? this.selectedRefs.filter(n => n !== name) : [...this.selectedRefs, name];
+    this.chooseSource();
+  }
+  private seedPanels() {
+    if (!this.selectedSource.rows.length) return;
+    this.initialized = true;
+    for (const kind of ['profile', 'editing', 'alleles', 'summary'] as FigureKind[]) { this.kind = kind; this.addPanel(); }
+    this.kind = 'profile';
+  }
   panels: FigurePanel[] = [];
   kind: FigureKind = 'profile';
   options: FigureOptions = { title: 'Editing outcomes', columns: 1, fontSize: 14, radius: 30, groupLimit: 5, minFrequency: 2, palette: 'okabe' };
@@ -74,12 +117,20 @@ export class FigureComposerComponent implements OnChanges {
   dragIndex: number | null = null;
   private nextId = 0;
   constructor(private sanitizer: DomSanitizer, private cdr: ChangeDetectorRef) {}
-  ngOnChanges() { /* Drafts are intentional snapshots; result selection must not overwrite them. */ }
+  ngOnChanges() {
+    if (this.active && !this.initialized && this.source.rows.length) {
+      this.selectedRefs = this.source.rows.map(r => r.name);
+      this.sourceChoice = this.origin === 'homoeolog' ? 'homeo' : 'ref:' + this.selectedRefs[0];
+      this.targetChoice = this.source.rows[0]?.target?.target_id || this.targetChoices[0] || '';
+      // The clicked result supplies the initial snapshot; later picker changes affect additions only.
+      this.seedPanels();
+    }
+  }
   letter(i: number) { return String.fromCharCode(97 + i); }
   addPanel() {
-    if (!this.source.rows.length || this.panels.length >= 12) return;
+    if (!this.selectedSource.rows.length || this.panels.length >= 12) return;
     const titles = { profile: 'Mutation profile', editing: 'Non-WT reads', alleles: 'Cut-site sequences', summary: 'Read summary' };
-    this.panels = [...this.panels, { id: ++this.nextId, kind: this.kind, title: titles[this.kind], source: captureFigureSource(this.source.label, this.source.rows) }];
+    this.panels = [...this.panels, { id: ++this.nextId, kind: this.kind, title: titles[this.kind], source: captureFigureSource(this.selectedSource.label, this.selectedSource.rows) }];
     this.refresh();
   }
   refresh() {

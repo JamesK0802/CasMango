@@ -118,6 +118,22 @@ describe('figure snapshots and publication SVG', () => {
   });
 });
 
+describe('figure source selection and initial panels', () => {
+  it('seeds four panels once, preserves deletions and mixes reference/combination snapshots', () => {
+    const composer = new FigureComposerComponent({bypassSecurityTrustHtml: (v: string) => v} as any, {detectChanges:vi.fn()} as any);
+    composer.genes = [gene('7A'), gene('7D')]; composer.source = source(); composer.active = true;
+    composer.ngOnChanges();
+    expect(composer.panels.map(p => p.kind)).toEqual(['profile', 'editing', 'alleles', 'summary']);
+    const original = structuredClone(composer.panels);
+    composer.sourceChoice = 'ref:7D'; composer.chooseSource(); composer.addPanel();
+    expect(composer.panels[4].source.rows.map(r => r.name)).toEqual(['7D']);
+    expect(composer.panels.slice(0, 4)).toEqual(original);
+    composer.remove(0); composer.ngOnChanges(); expect(composer.panels).toHaveLength(4);
+    composer.sourceChoice = 'homeo'; composer.selectedRefs = ['7A', '7D']; composer.chooseSource(); composer.addPanel();
+    expect(composer.panels[4].source.rows).toHaveLength(2);
+  });
+});
+
 describe('two-visible-pane workspace', () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
   function setup() {

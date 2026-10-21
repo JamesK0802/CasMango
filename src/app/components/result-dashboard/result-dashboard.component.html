@@ -679,14 +679,14 @@
           <strong>Analysis figure</strong>
           <button type="button" id="guide-close-analysis-figure" (click)="toggleFigure('standard')" aria-label="Close analysis figure">×</button>
         </header>
-        <div class="figure-editor-scroll"><app-figure-composer origin="standard" [source]="standardFigureSource" /></div>
+        <div class="figure-editor-scroll"><app-figure-composer origin="standard" [source]="standardFigureSource" [genes]="presentationGenes" [active]="standardFigureOpen" /></div>
       </section>
       <section id="guide-homeo-figure-pane" class="workspace-pane figure-pane" [hidden]="!homoeologFigureOpen" aria-label="Homoeolog figure">
         <header class="workspace-pane-header" (pointerdown)="beginWorkspaceSwipe($event)" (pointerup)="endWorkspaceSwipe($event)" (pointercancel)="cancelWorkspaceSwipe()">
           <strong>Homoeolog figure</strong>
           <button type="button" id="guide-close-homeo-figure" (click)="toggleFigure('homoeolog')" aria-label="Close homoeolog figure">×</button>
         </header>
-        <div class="figure-editor-scroll"><app-figure-composer origin="homoeolog" [source]="homoeologFigureSource" /></div>
+        <div class="figure-editor-scroll"><app-figure-composer origin="homoeolog" [source]="homoeologFigureSource" [genes]="presentationGenes" [active]="homoeologFigureOpen" /></div>
       </section>
     </div>
   </div>
