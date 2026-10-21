@@ -30,9 +30,10 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
         <select [id]="origin + '-figure-kind'" [(ngModel)]="kind">
           <option value="profile">Mutation profile</option><option value="editing">Non-WT reads</option>
           <option value="alleles">Cut-site sequences</option><option value="summary">Summary table</option>
+          <option *ngIf="sourceChoice === 'homeo'" value="coediting">Co-editing model</option>
         </select>
         <button type="button" class="primary" [attr.id]="origin === 'standard' ? 'guide-add-standard-panel' : 'guide-add-homeo-panel'"
-          [disabled]="!selectedSource.rows.length || panels.length >= 12" (click)="addPanel()">+ Add panel</button>
+          [disabled]="!selectedSource.rows.length || panels.length >= 12 || (kind === 'coediting' && selectedSource.rows.length < 2)" (click)="addPanel()">+ Add panel</button>
       </div>
       <details class="figure-settings"><summary>Title & layout</summary>
         <label>Figure title<input [(ngModel)]="options.title" maxlength="120" (ngModelChange)="refresh()"></label>
@@ -64,7 +65,12 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
       </footer><p *ngIf="exportPreviewMessage" role="status">{{ exportPreviewMessage }}</p><p class="error" *ngIf="error" role="alert">{{ error }}</p>
       </div>
       <div class="figure-canvas" [class.mobile-hidden]="mobilePane !== 'preview'" aria-label="Figure preview">
-        <div class="figure-preview" *ngIf="panels.length; else empty" [innerHTML]="preview"></div>
+        <div class="preview-tools" aria-label="Preview size">
+          <label>Zoom <input aria-label="Figure preview zoom" type="range" min="25" max="200" step="5" [ngModel]="previewZoom" (ngModelChange)="setPreviewZoom($event)"><span>{{ fitWidth ? 'Fit' : previewZoom + '%' }}</span></label>
+          <button type="button" (click)="setPreviewZoom(100)">100%</button>
+          <button type="button" [attr.aria-pressed]="fitWidth" (click)="fitWidth = !fitWidth">Fit width</button>
+        </div>
+        <div class="figure-preview" *ngIf="panels.length; else empty" [style.width]="fitWidth ? '100%' : previewWidth + 'px'" [innerHTML]="preview"></div>
         <ng-template #empty><div class="figure-empty">Choose a source and add a panel.</div></ng-template>
       </div>
     </section>`,
@@ -78,7 +84,8 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
     button,input,select{font:inherit;font-size:12px;border:1px solid var(--color-border,#dbe1e8);border-radius:7px;padding:8px;background:var(--color-surface,#fff);color:inherit}
     button{cursor:pointer;white-space:nowrap}button:disabled{opacity:.4;cursor:default}button.primary{background:#f59e0b;border-color:#f59e0b;color:#1e293b;font-weight:600}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
     details{border-block:1px solid var(--color-border,#e2e8f0);margin:14px 0;padding:10px 0}summary{cursor:pointer;font-size:12px;font-weight:600}label{display:grid;gap:5px;font-size:11px;margin:10px 0}.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}input,select{width:100%;min-width:0}.panel-list{display:grid;gap:7px;margin-bottom:14px}.panel-letter{font-weight:700;width:12px;flex-shrink:0}.panel-item>input{flex:1;min-width:0}.panel-item>button{padding:6px 8px}.panel-item{cursor:grab}
-    .figure-preview{border:1px solid #e2e8f0;background:#fff;overflow:auto}.figure-preview ::ng-deep svg{display:block;width:100%;height:auto;min-width:320px}.figure-empty{padding:45px 15px;text-align:center;background:var(--color-surface-alt,#f8fafc);border:1px dashed var(--color-border,#dbe1e8);border-radius:9px;font-size:13px;line-height:1.8}
+    .preview-tools{position:sticky;top:-18px;left:0;z-index:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;padding:8px 0;margin-bottom:12px;background:#f8fafc}.preview-tools label{display:flex;align-items:center;gap:8px;margin:0}.preview-tools input{width:100px;padding:0;accent-color:#f59e0b}.preview-tools label span{min-width:35px}.preview-tools button{padding:5px 8px;font-size:11px}.preview-tools button[aria-pressed="true"]{background:#fffbeb;border-color:#e9b34b}
+    .figure-preview{border:1px solid #e2e8f0;background:#fff;max-width:none;flex-shrink:0}.figure-preview ::ng-deep svg{display:block;width:100%;height:auto;min-width:0}.figure-empty{padding:45px 15px;text-align:center;background:var(--color-surface-alt,#f8fafc);border:1px dashed var(--color-border,#dbe1e8);border-radius:9px;font-size:13px;line-height:1.8}
     footer{justify-content:space-between;margin-top:14px;flex-wrap:wrap}.error{color:#b45309;font-size:12px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
   `]
 })
@@ -90,6 +97,10 @@ export class FigureComposerComponent implements OnChanges {
   @Input() previewOnly = false;
   exportPreviewMessage = '';
   mobilePane: 'setup' | 'preview' = 'setup';
+  previewZoom = 100;
+  fitWidth = false;
+  get previewWidth() { return (this.options.columns === 2 ? 1440 : 780) * this.previewZoom / 100; }
+  setPreviewZoom(value: unknown) { const n = Number(value); this.previewZoom = Number.isFinite(n) ? Math.max(25, Math.min(200, n)) : 100; this.fitWidth = false; }
   sourceChoice = '';
   targetChoice = '';
   selectedRefs: string[] = [];
@@ -104,6 +115,7 @@ export class FigureComposerComponent implements OnChanges {
   chooseSource() {
     if (!this.sourceChoice) return;
     this.sourceChosen = true;
+    if (this.sourceChoice !== 'homeo' && this.kind === 'coediting') this.kind = 'profile';
     if (!this.initialized) this.seedPanels();
   }
   toggleReference(name: string) {
@@ -138,8 +150,8 @@ export class FigureComposerComponent implements OnChanges {
   }
   letter(i: number) { return String.fromCharCode(97 + i); }
   addPanel() {
-    if (!this.selectedSource.rows.length || this.panels.length >= 12) return;
-    const titles = { profile: 'Mutation profile', editing: 'Non-WT reads', alleles: 'Cut-site sequences', summary: 'Read summary' };
+    if (!this.selectedSource.rows.length || this.panels.length >= 12 || (this.kind === 'coediting' && this.selectedSource.rows.length < 2)) return;
+    const titles = { profile: 'Mutation profile', editing: 'Non-WT reads', alleles: 'Cut-site sequences', summary: 'Read summary', coediting: 'Co-editing model' };
     this.panels = [...this.panels, { id: ++this.nextId, kind: this.kind, title: titles[this.kind], source: captureFigureSource(this.selectedSource.label, this.selectedSource.rows) }];
     this.refresh();
   }

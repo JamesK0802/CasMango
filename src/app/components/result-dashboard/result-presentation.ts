@@ -78,7 +78,7 @@ export function homeologCombination(rows: ComparisonRow[], metric: 'edited' | 'i
     all: distribution[distribution.length - 1] * 100, any: (1 - distribution[0]) * 100,
     distribution: distribution.map((p, count) => ({ count, percent: p * 100 })) };
 }
-export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary';
+export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary' | 'coediting';
 export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; }
 export interface FigureOptions { title: string; columns: number; fontSize: number; radius: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }
 export const FIGURE_COLORS = {
@@ -132,7 +132,7 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
   const font = options.fontSize;
   const text = (x: number, y: number, content: unknown, size = font, extra = '') => `<text x="${x}" y="${y}" font-size="${size}" ${extra}>${escapeSvg(content)}</text>`;
   const legend = colors.map((color, i) => `<rect x="${margin + i * 155}" y="65" width="11" height="11" fill="${color}"/>${text(margin + 17 + i * 155, 75, ['WT', 'Substitution', 'In-frame indel', 'Out-of-frame indel'][i], 12)}`).join('');
-  const panelHeight = (panel: FigurePanel) => panel.kind === 'alleles'
+  const panelHeight = (panel: FigurePanel) => panel.kind === 'coediting' ? 156 + (panel.source.rows.length + 1) * 34 : panel.kind === 'alleles'
     ? 90 + panel.source.rows.reduce((height, row) => height + 56 + Math.min(options.groupLimit, (row.target?.top_groups ?? []).filter(g => g.read_pct >= options.minFrequency).length) * 30, 0)
     : 112 + panel.source.rows.length * (panel.kind === 'summary' ? 38 : 56);
   const heights: number[] = [];
@@ -163,6 +163,21 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
         body += text(barX + barWidth + 6, top + 17, fmt(panel.kind === 'editing' ? row.edited : row.wt), 12);
       }
       body += text(112, 85 + panel.source.rows.length * 56, panel.kind === 'editing' ? 'Non-WT reads (%) · indels + substitutions' : 'Read composition (%) · label = WT', 11, 'fill="#64748b"');
+    } else if (panel.kind === 'coediting') {
+      body += text(0, 66, 'Non-WT · independence assumed', 11, 'fill="#64748b"');
+      const model = homeologCombination(panel.source.rows);
+      if (!model) body += text(0, 94, 'Select at least two references with aligned reads.', 12);
+      else {
+        body += text(0, 90, `All ${panel.source.rows.length}: ${fmt(model.all)}     At least one: ${fmt(model.any)}`, font);
+        const barX = 65, barWidth = inner - barX - 65;
+        for (const item of model.distribution) {
+          const top = 112 + item.count * 34;
+          body += text(0, top + 15, `${item.count} / ${panel.source.rows.length}`, 12);
+          body += `<rect x="${barX}" y="${top}" width="${barWidth}" height="20" rx="3" fill="#f1f5f9"/><rect x="${barX}" y="${top}" width="${barWidth * item.percent / 100}" height="20" rx="3" fill="${colors[2]}"/>`;
+          body += text(barX + barWidth + 8, top + 15, fmt(item.percent), 12);
+        }
+        body += text(0, 142 + model.distribution.length * 34, 'Model, not measured same-cell editing.', 11, 'fill="#64748b"');
+      }
     } else if (panel.kind === 'summary') {
       const columns = [0, inner * .26, inner * .43, inner * .60, inner * .77];
       ['Reference', 'Reads', 'WT', 'In-frame', 'Out-of-frame'].forEach((v, j) => body += text(columns[j], 76, v, 12, 'font-weight="600"'));

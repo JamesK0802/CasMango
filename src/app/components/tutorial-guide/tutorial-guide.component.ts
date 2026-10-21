@@ -1492,7 +1492,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Data Curation',
       headline: 'Interactive Curation View',
       textLines: [
-        'Create a separate curated view. Exclude and restore a group to update counts. Indel threshold is also adjustable here without rerunning alignment.'
+        'Create a separate curated view. Exclude and restore groups, or adjust Indel threshold beside the Annotation heading.'
       ],
       targetSelector: '#guide-curate-btn',
       interactiveAction: 'test_curation',
@@ -1522,7 +1522,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'result-figure-homeo', stageName: 'Optional Figures', headline: 'Explore the figure workspace',
-      textLines: ['Open Figure beside Curate. Choose references or a Homeolog combination in Setup; arrange panels and view the figure alongside. On a small screen, switch between Setup and Figure.'],
+      textLines: ['Choose sources, add panels (including Co-editing for Homeolog combinations), and adjust Zoom or Fit width. On a small screen, switch between Setup and Figure.'],
       targetSelector: '#guide-figure-btn', nextButtonText: 'Next: Export reports ▶'
     },
 

@@ -484,6 +484,8 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     if (!flat.length || !this.state.selectedTarget) return;
     const safeIdx = Math.min(this.state.selectedRowIndex, flat.length - 1);
     const selectedData = flat[safeIdx].target;
+    const chartFont = (context: { chart: { width: number } }) => ({ size: context.chart.width < 240 ? 9 : 12 });
+    const chartLegend = { position: 'bottom' as const, labels: { font: chartFont, boxWidth: 10, padding: 6 } };
 
     const indelCtx = document.getElementById('indelChart') as HTMLCanvasElement;
     if (indelCtx) {
@@ -502,7 +504,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
           responsive: true,
           maintainAspectRatio: false,
           scales: { x: { stacked: true }, y: { stacked: true, min: 0, max: 100, title: { display: true, text: 'Percentage (%)' } } },
-          plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Mutation Distribution per Target' } }
+          plugins: { legend: chartLegend, title: { display: true, text: 'Mutation Distribution per Target', font: chartFont } }
         }
       }));
     }
@@ -518,7 +520,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
             backgroundColor: ['#009E73', '#CC79A7', '#0072B2', '#E69F00']
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: `Mutation Distribution (${selectedData.target_id})` } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: chartLegend, title: { display: true, text: `Mutation Distribution (${selectedData.target_id})`, font: chartFont } } }
       }));
     }
 
@@ -533,7 +535,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
             backgroundColor: ['#E69F00', '#009E73', '#CC79A7']
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: `Indel Editing (${selectedData.target_id})` } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: chartLegend.labels }, title: { display: true, text: `Indel Editing (${selectedData.target_id})`, font: chartFont } } }
       }));
     }
   }

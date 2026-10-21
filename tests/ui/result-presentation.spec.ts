@@ -81,6 +81,32 @@ describe('presentation-only homoeolog comparison', () => {
 });
 
 describe('figure snapshots and publication SVG', () => {
+  it('renders a selected-combination co-editing model with explicit assumptions', () => {
+    const svg = renderFigure([{id:1,kind:'coediting',title:'Co-editing model',source:source()}],options);
+    expect(svg).toContain('All 2: 10.0%'); expect(svg).toContain('At least one: 60.0%');
+    expect(svg).toContain('independence assumed'); expect(svg).toContain('not measured same-cell');
+    expect(svg).toContain('0 / 2'); expect(svg).toContain('2 / 2');
+    const missing = source(); missing.rows[0].edited = null;
+    expect(renderFigure([{id:1,kind:'coediting',title:'Model',source:missing}],options)).toContain('with aligned reads');
+  });
+  it('offers combination panels without accepting a single-reference co-editing panel', () => {
+    const composer = new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v} as any, {detectChanges:vi.fn()} as any);
+    composer.source = source(); composer.kind = 'coediting'; composer.addPanel();
+    expect(composer.panels[0].kind).toBe('coediting');
+    composer.source = {...source(),rows:source().rows.slice(0,1)}; composer.addPanel();
+    expect(composer.panels).toHaveLength(1);
+  });
+  it('changes preview size without changing export SVG or panel snapshots', () => {
+    const composer = new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v} as any, {detectChanges:vi.fn()} as any);
+    composer.source = source(); composer.active = true; composer.ngOnChanges();
+    const svg = composer.svg, panels = structuredClone(composer.panels);
+    composer.setPreviewZoom(50); expect(composer.previewWidth).toBe(390);
+    composer.fitWidth = true; composer.setPreviewZoom(200); expect(composer.fitWidth).toBe(false);
+    expect(composer.previewWidth).toBe(1560);
+    composer.setPreviewZoom(0); expect(composer.previewZoom).toBe(25);
+    composer.setPreviewZoom('bad'); expect(composer.previewZoom).toBe(100);
+    expect(composer.svg).toBe(svg); expect(composer.panels).toEqual(panels);
+  });
   it('captures an independent deep snapshot, including sequence tokens', () => {
     const data = source(), snapshot = captureFigureSource(data.label, data.rows);
     data.rows[0].target!.top_groups![0].tokens[0].val = 'CHANGED';
