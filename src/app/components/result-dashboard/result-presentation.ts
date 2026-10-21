@@ -55,6 +55,29 @@ export function comparisonSummary(rows: ComparisonRow[], threshold: number) {
 }
 
 export interface FigureSource { label: string; rows: ComparisonRow[]; }
+
+/** A sensitivity model, NOT a measurement of co-editing or cell/plant genotypes.
+ * Assumes each read fraction is a locus-event probability in the same population,
+ * with independence between loci. Bulk amplicons cannot establish either premise.
+ * Missing loci invalidate the whole selected combination; never drop them silently.
+ */
+export function homeologCombination(rows: ComparisonRow[], metric: 'edited' | 'indel' | 'outOfFrame' = 'edited') {
+  const values = rows.map(row => ({ name: row.name, rate: row.edited === null ? null :
+    metric === 'indel' ? (row.inFrame ?? 0) + (row.outOfFrame ?? 0) : row[metric] }));
+  if (values.length < 2 || values.some(value => value.rate === null)) return null;
+  const rates = values.map(value => Math.max(0, Math.min(1, value.rate! / 100)));
+  let distribution = [1];
+  for (const p of rates) {
+    const next = Array(distribution.length + 1).fill(0);
+    distribution.forEach((value, k) => { next[k] += value * (1 - p); next[k + 1] += value * p; });
+    distribution = next;
+  }
+  const ordered = [...values].sort((a, b) => a.rate! - b.rate!);
+  return { weakest: ordered[0], strongest: ordered[ordered.length - 1],
+    gap: ordered[ordered.length - 1].rate! - ordered[0].rate!,
+    all: distribution[distribution.length - 1] * 100, any: (1 - distribution[0]) * 100,
+    distribution: distribution.map((p, count) => ({ count, percent: p * 100 })) };
+}
 export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary';
 export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; }
 export interface FigureOptions { title: string; columns: number; fontSize: number; radius: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }

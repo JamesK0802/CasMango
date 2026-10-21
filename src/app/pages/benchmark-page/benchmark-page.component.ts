@@ -12,7 +12,8 @@ import { benchmarkExampleRows, normalizationExampleMates } from '../../component
   selector: 'app-benchmark-page',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './benchmark-page.component.html'
+  templateUrl: './benchmark-page.component.html',
+  styleUrl: './benchmark-page.component.css'
 })
 export class BenchmarkPageComponent implements DoCheck, OnDestroy {
   private mergeRevision = 0;

@@ -212,3 +212,8 @@
 .collection-sort-button span { color: #94a3b8; }
 .collection-sort-button:focus-visible { outline: 2px solid #d97706; outline-offset: 4px; }
 .collection-sort-button:disabled { opacity: .5; cursor: default; }
+.analysis-session-switcher{position:relative;flex-shrink:0}
+.analysis-session-switcher.compact{height:24px;margin-bottom:4px;z-index:20}
+.session-trigger{border:0;background:transparent;color:#64748b;font:inherit;font-size:11px;padding:2px 8px;cursor:pointer}
+.compact .analysis-tabs-bar{position:absolute;top:23px;left:0;right:0;visibility:hidden;opacity:0;pointer-events:none;background:#f1f5f9;box-shadow:0 8px 20px #0f172a1a;border-radius:8px}
+.compact.expanded .analysis-tabs-bar{visibility:visible;opacity:1;pointer-events:auto}

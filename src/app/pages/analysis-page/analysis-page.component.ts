@@ -128,6 +128,8 @@ interface ReferenceExcelRow { homoeologName: string; geneName: string; geneSeq: 
   styleUrl: './analysis-page.component.css'
 })
 export class AnalysisPageComponent implements OnInit, OnDestroy {
+  sessionTabsOpen = false;
+  tabsHovered = false;
   showUploadChoices = false;
   isReadingFolders = false;
   isCopyingFiles = false;

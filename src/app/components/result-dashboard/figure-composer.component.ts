@@ -9,10 +9,11 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
   selector: 'app-figure-composer', standalone: true, imports: [CommonModule, FormsModule],
   template: `
     <section class="composer" [attr.data-figure-source]="origin" [attr.data-panel-count]="panels.length">
-      <header><div><h3>{{ origin === 'standard' ? 'Standard' : 'Homeolog' }} figure</h3><small>Independent figure draft · source data stays unchanged</small></div></header>
+      <nav class="mobile-figure-tabs" aria-label="Figure workspace"><button type="button" [attr.aria-pressed]="mobilePane === 'setup'" (click)="mobilePane = 'setup'">Setup</button><button type="button" [attr.aria-pressed]="mobilePane === 'preview'" (click)="mobilePane = 'preview'">Figure</button></nav>
+      <div class="figure-controls" [class.mobile-hidden]="mobilePane !== 'setup'">
       <div class="source-picker">
         <label>Source<select aria-label="Figure source" [(ngModel)]="sourceChoice" (ngModelChange)="chooseSource()">
-          <option value="">Choose a reference or Homeo</option>
+          <option value="">Choose a source</option>
           <option *ngFor="let gene of genes" [value]="'ref:' + gene.gene">{{ gene.gene }}</option>
           <option value="homeo">Homeolog combination</option>
         </select></label>
@@ -23,7 +24,7 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
           <button type="button" *ngFor="let gene of genes" [attr.aria-pressed]="selectedRefs.includes(gene.gene)" (click)="toggleReference(gene.gene)">{{ selectedRefs.includes(gene.gene) ? '✓ ' : '' }}{{ gene.gene }}</button>
         </div>
       </div>
-      <div class="source-line">Selected source: {{ selectedSource.label || 'Choose a source' }} · new panels only</div>
+      <div class="source-line">{{ selectedSource.label || 'Choose a source' }}</div>
       <div class="add-row">
         <label class="sr-only" [for]="origin + '-figure-kind'">Panel type</label>
         <select [id]="origin + '-figure-kind'" [(ngModel)]="kind">
@@ -56,16 +57,21 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
           <button type="button" (click)="remove(i)" aria-label="Remove panel">×</button>
         </div>
       </div>
-      <div class="figure-preview" *ngIf="panels.length; else empty" [innerHTML]="preview"></div>
-      <ng-template #empty><div class="figure-empty">Add a chart, summary or sequence panel.<br><small>Switch results to add panels from another reference or combination.</small></div></ng-template>
       <footer>
-        <small>{{ panels.length }}/12 panels · source captured when added</small>
+        <small>{{ panels.length }}/12 panels</small>
         <div><button type="button" [disabled]="!panels.length || exporting" (click)="downloadSvg()">SVG</button>
         <button type="button" [disabled]="!panels.length || exporting" (click)="downloadPng()">{{ exporting ? 'Rendering…' : 'PNG 2×' }}</button></div>
       </footer><p *ngIf="exportPreviewMessage" role="status">{{ exportPreviewMessage }}</p><p class="error" *ngIf="error" role="alert">{{ error }}</p>
+      </div>
+      <div class="figure-canvas" [class.mobile-hidden]="mobilePane !== 'preview'" aria-label="Figure preview">
+        <div class="figure-preview" *ngIf="panels.length; else empty" [innerHTML]="preview"></div>
+        <ng-template #empty><div class="figure-empty">Choose a source and add a panel.</div></ng-template>
+      </div>
     </section>`,
   styles: [`
-    :host{display:block;min-width:0}*{box-sizing:border-box}.composer{padding:18px;background:var(--color-surface,#fff);color:var(--color-text-primary,#1e293b)}
+    :host{display:block;min-width:0;height:100%}*{box-sizing:border-box}.composer{display:grid;grid-template-columns:minmax(300px,360px) minmax(0,1fr);height:100%;min-height:0;background:var(--color-surface,#fff);color:var(--color-text-primary,#1e293b)}
+    .figure-controls,.figure-canvas{min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;padding:18px}.figure-controls{border-right:1px solid #e2e8f0}.figure-canvas{background:#f8fafc}.mobile-figure-tabs{display:none}
+    @media(max-width:760px){.composer{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.mobile-figure-tabs{display:flex;gap:8px;padding:8px 12px}.mobile-figure-tabs button[aria-pressed="true"]{background:#fffbeb;border-color:#e9b34b}.mobile-hidden{display:none}.figure-controls{border-right:0}}
     h3{margin:0 0 4px;font-size:16px}small,.source-line{font-size:11px;color:var(--color-text-secondary,#64748b);line-height:1.5}.source-line{margin:15px 0 8px;overflow-wrap:anywhere}
     .source-picker{display:grid;grid-template-columns:1fr 1fr;gap:8px}.reference-picker{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px}.reference-picker button[aria-pressed="true"]{background:#fffbeb;border-color:#e9b34b}
     .add-row,footer,footer>div,.panel-item{display:flex;align-items:center;gap:7px}.add-row select{flex:1;min-width:0}
@@ -83,6 +89,7 @@ export class FigureComposerComponent implements OnChanges {
   @Input() active = false;
   @Input() previewOnly = false;
   exportPreviewMessage = '';
+  mobilePane: 'setup' | 'preview' = 'setup';
   sourceChoice = '';
   targetChoice = '';
   selectedRefs: string[] = [];
@@ -122,10 +129,11 @@ export class FigureComposerComponent implements OnChanges {
   ngOnChanges() {
     if (this.active && !this.initialized && this.source.rows.length) {
       this.selectedRefs = this.source.rows.map(r => r.name);
-      this.sourceChoice = this.origin === 'homoeolog' ? 'homeo' : 'ref:' + this.selectedRefs[0];
+      this.sourceChoice = this.source.rows.length > 1 ? 'homeo' : 'ref:' + this.selectedRefs[0];
       this.targetChoice = this.source.rows[0]?.target?.target_id || this.targetChoices[0] || '';
       // The clicked result supplies the initial snapshot; later picker changes affect additions only.
       this.seedPanels();
+      this.sourceChosen = true;
     }
   }
   letter(i: number) { return String.fromCharCode(97 + i); }

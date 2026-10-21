@@ -76,3 +76,7 @@
   .workspace-pane{flex-basis:100%;height:100%;min-height:0}.workspace-pane-header{padding:11px}.workspace-pane-header small{display:none}.workspace-pane-body{padding:10px}.workspace-label{width:100%}.has-companions .standard-pane .metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(prefers-reduced-motion:reduce){.workspace-track{scroll-behavior:auto}}
+.figure-workspace{flex:1;min-height:0;overflow:hidden;border-radius:14px;background:var(--color-surface,#fff)}
+.result-workspace[hidden],.figure-workspace[hidden]{display:none!important}
+.figure-workspace.guide-exploration{margin-top:170px}
+@media(max-width:760px){.figure-workspace.guide-exploration{margin-top:220px}}

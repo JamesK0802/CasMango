@@ -45,8 +45,10 @@
     <section class="bench-dataset-card" id="guide-bench-dataset-card">
       <div class="bench-dataset-header">
         <div><h3>Labelled Dataset</h3><p>Each row identifies the expected gene/reference for its reads. Reuse a gene name to add more target windows to that gene.</p></div>
-        <button *ngIf="state.guideBenchmarkActive" id="guide-bench-load-classes" type="button" class="btn-secondary" (click)="loadGuideClasses()">Load CPC + TRY example</button>
+        <div class="bench-dataset-actions">
+        <button *ngIf="state.guideBenchmarkActive" id="guide-bench-load-classes" type="button" class="bench-secondary" (click)="loadGuideClasses()">Load CPC + TRY example</button>
         <button type="button" class="btn-add-small" (click)="state.addBenchRow()">+ Add Class</button>
+        </div>
       </div>
       <div class="bench-class-row" *ngFor="let row of state.benchRows; let i = index">
         <div class="bench-class-files">
@@ -126,7 +128,7 @@
     <section class="bench-dataset-card" id="guide-bench-mates" [attr.data-guide-loaded]="mergeR1File?.name === 'guide_R1.fastq' && mergeR2File?.name === 'guide_R2.fastq'">
       <div class="bench-dataset-header">
         <div><h3>Mate Input</h3><p>Drop R1 and R2 together, or choose either mate separately.</p></div>
-        <button *ngIf="state.guideBenchmarkActive" id="guide-bench-load-mates" type="button" class="btn-secondary" (click)="loadGuideMates()">Load example R1 + R2</button>
+        <button *ngIf="state.guideBenchmarkActive" id="guide-bench-load-mates" type="button" class="bench-secondary" (click)="loadGuideMates()">Load example R1 + R2</button>
       </div>
       <div class="merge-mate-dropzone" [class.dragging]="mergeMateDragging"
         (dragover)="onMergeMateDragOver($event)" (dragleave)="onMergeMateDragLeave($event)" (drop)="onMergeMateDrop($event)">
@@ -171,8 +173,8 @@
           </p>
         </div>
         <div class="merge-output-actions">
-          <button type="button" (click)="downloadMergeFile()">Download FASTQ</button>
-          <button type="button" (click)="exportMergeFile()">Open in Sequence Viewer</button>
+          <button type="button" class="bench-secondary" (click)="downloadMergeFile()">Download FASTQ</button>
+          <button type="button" class="bench-secondary bench-viewer" (click)="exportMergeFile()">Open in Sequence Viewer ↗</button>
         </div>
       </article>
     </section>

@@ -1,12 +1,17 @@
 <div class="analysis-page">
   <!-- ══════════════ ANALYSIS TAB BAR ══════════════ -->
-  <div class="analysis-tabs-bar" id="guide-tabs-bar">
+  <div class="analysis-session-switcher" [class.compact]="state.genes.length > 0" [class.expanded]="sessionTabsOpen || tabsHovered" (mouseenter)="tabsHovered = true" (mouseleave)="tabsHovered = false">
+  <button *ngIf="state.genes.length > 0" type="button" class="session-trigger" [attr.aria-expanded]="sessionTabsOpen || tabsHovered" aria-controls="guide-tabs-bar" (click)="sessionTabsOpen = !sessionTabsOpen">Analyses ▾</button>
+  <div class="analysis-tabs-bar" id="guide-tabs-bar" (keydown.escape)="sessionTabsOpen = false; tabsHovered = false">
     <div class="tabs-scroll-container">
       <div *ngFor="let tab of state.tabs"
            class="analysis-tab-item"
            [class.active]="tab.id === state.activeTabId"
            [class.locked]="state.isAnalysisRunning && tab.id !== state.activeTabId"
            [attr.aria-disabled]="state.isAnalysisRunning && tab.id !== state.activeTabId"
+           role="button" tabindex="0"
+           (keydown.enter)="state.selectTab(tab.id)"
+           (keydown.space)="$event.preventDefault(); state.selectTab(tab.id)"
            [attr.title]="state.isAnalysisRunning && tab.id !== state.activeTabId ? 'Finish or cancel the current analysis before switching tabs' : null"
            (click)="state.selectTab(tab.id)">
         <span class="tab-name" *ngIf="editingTabId !== tab.id" (dblclick)="startRenameTab(tab, $event)" title="Double click to rename">{{ tab.name }}</span>
@@ -20,6 +25,7 @@
       </div>
     </div>
     <button type="button" class="btn-add-tab" id="guide-add-tab-btn" (click)="state.addTab()" [disabled]="state.isAnalysisRunning" [title]="state.isAnalysisRunning ? 'Finish or cancel the current analysis first' : 'New Analysis Tab'">+</button>
+  </div>
   </div>
 
   <app-result-dashboard *ngIf="state.genes.length > 0"></app-result-dashboard>

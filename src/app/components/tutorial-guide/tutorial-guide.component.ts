@@ -44,7 +44,7 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.workspace-tour]="guideMode === 'workspace' && !currentStep.isIntro" [class.no-target]="!targetRect" tabindex="-1">
+    <div class="guide-root" [class.figure-tour]="currentStep.id === 'result-figure-homeo'" [class.workspace-tour]="guideMode === 'workspace' && !currentStep.isIntro" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
@@ -410,6 +410,16 @@ export interface GuideStep {
     .workspace-tour .guide-dialog-wrapper { flex-direction: row; }
     .workspace-tour .bubble-footer { margin-top: 8px; padding-top: 8px; }
     .workspace-tour .arrow-svg-layer { display: none; }
+    .figure-tour .mascot-col{width:64px;flex:0 0 64px}
+    .figure-tour .guide-dialog-wrapper{flex-direction:row;gap:12px}
+    .figure-tour .mascot-col{flex-direction:column;align-items:center}
+    .figure-tour .mascot-avatar-frame{width:60px;height:72px}
+    .figure-tour .mascot-tag{max-width:64px;font-size:8px;box-sizing:border-box;padding:3px 5px}
+    .figure-tour .bubble-content{padding:12px 16px}
+    .figure-tour .bubble-headline{font-size:17px;margin-bottom:6px}
+    .figure-tour .text-line{margin:4px 0;font-size:12px}
+    .figure-tour .text-lines-block{margin-bottom:4px}
+    .figure-tour .bubble-footer{margin-top:8px;padding-top:8px}
 
     .guide-dialog-wrapper.is-centered {
       position: relative;
@@ -1041,7 +1051,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Analysis Tabs',
       headline: 'Open a Guide Analysis Tab',
       textLines: [
-        '• CasMANGO allows managing multiple independent analysis sessions simultaneously in your browser.'
+        'Keep independent analyses in separate tabs. In results, hover over Analyses or tap it to switch sessions.'
       ],
       targetSelector: '#guide-tabs-bar',
       interactiveAction: 'create_guide_tab',
@@ -1339,7 +1349,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'benchmark-normalization-results', stageName: 'Normalized Output', headline: 'Consensus and X-padded output',
-      textLines: ['Overlapping mates form a consensus; separated mates retain an X guard. Open the output in Sequence Viewer to inspect it.'],
+      textLines: ['Overlapping mates form a consensus; separated mates retain an X guard. The normalized FASTQ can be downloaded or opened in Sequence Viewer.'],
       targetSelector: '#guide-bench-normalization-results', nextButtonText: 'Finish Benchmark Tour ▶'
     },
     {
@@ -1517,13 +1527,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
     {
       id: 'result-homeo-open', stageName: 'Optional Analysis', headline: 'Explore Homeolog analysis',
-      textLines: ['Available in Homeolog mode. Open the comparison and try different references and targets to compare editing profiles.'],
+      textLines: ['Available in Homeolog mode. Choose a combination to compare editing balance. Explore the co-editing model if useful: it assumes independent editing, not measured same-cell editing.'],
       targetSelector: '#guide-open-homeo', nextButtonText: 'Next: Figure workspace ▶'
     },
     {
       id: 'result-figure-homeo', stageName: 'Optional Figures', headline: 'Explore the figure workspace',
-      textLines: ['Open Figure below a results card. Choose a reference or Homeolog combination, then try adding, arranging or removing panels.'],
-      targetSelector: '#guide-homeo-figure', nextButtonText: 'Next: Export reports ▶'
+      textLines: ['Open Figure beside Curate. Choose references or a Homeolog combination in Setup; arrange panels and view the figure alongside. On a small screen, switch between Setup and Figure.'],
+      targetSelector: '#guide-figure-btn', nextButtonText: 'Next: Export reports ▶'
     },
 
     // ── R6. Export Excel Reports ──
@@ -1626,11 +1636,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (step.id === 'workspace-search' && document.querySelector('#guide-workspace-search-help-panel')) return '#guide-workspace-find-region';
     if (step.id === 'result-homeo-open' && document.querySelector('#guide-open-homeo[aria-pressed="true"]')) return '#guide-homeo-result-pane';
     if (step.id === 'result-figure-homeo') {
-      if (document.querySelector('#guide-homeo-figure[aria-pressed="true"]')) return '#guide-homeo-figure-pane';
-      if (document.querySelector('#guide-standard-figure[aria-pressed="true"]')) return '#guide-analysis-figure-pane';
-      return document.querySelector('#guide-open-homeo[aria-pressed="true"]') ? '#guide-homeo-figure' : '#guide-standard-figure';
+      return document.querySelector('#guide-figure-btn[aria-pressed="true"]') ? '#guide-figure-workspace' : '#guide-figure-btn';
     }
-    if (step.id === 'result-figure-both' && document.querySelector('#guide-standard-figure[aria-pressed="true"]')) return '#guide-add-standard-panel';
     if (step.id === 'result-viewer-reproduce' && this.viewerLoaded) return '#resultsSection';
     if (['workspace-align', 'workspace-reads'].includes(step.id) && this.isCurrentActionCompleted) return '#guide-workspace-viewer';
     if (step.id === 'benchmark-run' && this.isCurrentActionCompleted) return '#guide-bench-results';
@@ -1666,8 +1673,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'switch_reference': return this.state.currentGene?.gene === 'TRY';
       case 'homeo_open': return !!document.querySelector('#guide-open-homeo[aria-pressed="true"]');
       case 'homeo_select': return !!document.querySelector('#guide-homeo-comparison[data-selection-count="1"] #guide-homeo-second-reference[aria-pressed="false"]');
-      case 'figure_homeo': return !!document.querySelector('#guide-homeo-figure[aria-pressed="true"]') && Number(document.querySelector('[data-figure-source="homoeolog"]')?.getAttribute('data-panel-count') || 0) >= 4;
-      case 'figure_both': return Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) >= 4 && !!document.querySelector('#guide-homeo-figure-pane:not([hidden])');
+      case 'figure_homeo':
+      case 'figure_both': return !!document.querySelector('#guide-figure-btn[aria-pressed="true"]') && Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) >= 4;
       case 'exclude_group': return this.excludedExample;
       case 'restore_group': return this.restoredExample;
       case 'click_export':
@@ -1756,8 +1763,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private allowedSelectors(): string[] {
     if (this.pendingAction) return [];
     if (this.isOptionalExploration) return [
-      '#guide-open-homeo', '.homeo-pane', '.figure-pane', '.workspace-rail',
-      '#guide-standard-figure', '.gene-tab-btn', '.scope-tab-btn'
+      '#guide-open-homeo', '.homeo-pane', '.figure-workspace', '.workspace-rail',
+      '#guide-figure-btn', '.gene-tab-btn', '.scope-tab-btn'
     ];
     switch (this.currentStep.id) {
       case 'analysis-tabs': return this.guideTabCreated ? [] : ['#guide-add-tab-btn'];
@@ -1771,8 +1778,8 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'result-references': return ['.gene-tab-btn[data-curation-key="TRY"]'];
       case 'result-homeo-open': return this.isCurrentActionCompleted ? [] : ['#guide-open-homeo'];
       case 'result-homeo-select': return this.isCurrentActionCompleted ? [] : ['#guide-homeo-second-reference'];
-      case 'result-figure-homeo': return this.isCurrentActionCompleted ? [] : [document.querySelector('#guide-homeo-figure[aria-pressed="true"]') ? '#guide-add-homeo-panel' : '#guide-homeo-figure'];
-      case 'result-figure-both': return this.isCurrentActionCompleted ? [] : [document.querySelector('#guide-standard-figure[aria-pressed="true"]') ? '#guide-add-standard-panel' : '#guide-standard-figure'];
+      case 'result-figure-homeo':
+      case 'result-figure-both': return ['#guide-figure-btn', '#guide-figure-workspace'];
       case 'result-curation': return this.state.isCuratedView ? [] : ['#guide-curate-btn'];
       case 'result-exclude-group': return this.excludedExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
       case 'result-restore-group': return this.restoredExample ? [] : ['#guide-annotation-panel [data-guide-group-rank="5"] .exclude-btn-group'];
@@ -2516,8 +2523,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.clickInternally('#guide-homeo-select-all');
     }
     if (step.id === 'result-export-report') {
-      if (document.querySelector('#guide-standard-figure[aria-pressed="true"]')) this.clickInternally('#guide-close-analysis-figure');
-      if (document.querySelector('#guide-homeo-figure[aria-pressed="true"]')) this.clickInternally('#guide-close-homeo-figure');
+      if (document.querySelector('#guide-figure-btn[aria-pressed="true"]')) this.clickInternally('#guide-figure-btn');
       if (document.querySelector('#guide-open-homeo[aria-pressed="true"]')) this.clickInternally('#guide-open-homeo');
     }
     if (['result-homeo-open', 'result-homeo-select', 'result-figure-homeo', 'result-figure-both'].includes(step.id)) {

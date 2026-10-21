@@ -5242,5 +5242,5 @@ app-result-dashboard:has(.results-dashboard){display:block;flex:1;min-height:0;o
   .results-dashboard .export-bar{display:flex!important;gap:6px;flex-wrap:wrap}
   .results-dashboard .mobile-top-bar{display:none}
   .results-dashboard .left-actions,.results-dashboard .right-actions{display:flex!important;gap:6px!important;flex-wrap:wrap}
-  .results-dashboard .export-bar button{padding:6px 9px;font-size:11px;min-height:30px}
+  .results-dashboard .export-bar button{width:auto;flex:0 1 auto;padding:6px 9px!important;font-size:11px;min-height:30px}
 }

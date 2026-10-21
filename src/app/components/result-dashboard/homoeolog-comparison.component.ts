@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { GeneResult } from '../../models/analysis.model';
-import { comparisonRows, comparisonSummary, FIGURE_COLORS, FigureSource } from './result-presentation';
+import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource } from './result-presentation';
 
 @Component({
   selector: 'app-homoeolog-comparison', standalone: true, imports: [CommonModule, FormsModule],
@@ -16,16 +16,22 @@ import { comparisonRows, comparisonSummary, FIGURE_COLORS, FigureSource } from '
           [attr.id]="i === 1 ? 'guide-homeo-second-reference' : null" [attr.aria-pressed]="selectedNames.includes(gene.gene)"
           [class.selected]="selectedNames.includes(gene.gene)" (click)="toggle(gene.gene)"><span>{{ selectedNames.includes(gene.gene) ? '✓' : '+' }}</span> {{ gene.gene }}</button>
       </div>
-      <p class="context">{{ scopeLabel }} · {{ activeTarget || 'No target' }} · selected combination only</p>
       <ng-container *ngIf="rows.length; else empty">
-        <div class="overview">
-          <div><strong>{{ stats.withEvidence }}/{{ stats.selected }}</strong><small>With edit evidence</small></div>
-          <div><strong>{{ stats.evaluated }}/{{ stats.selected }}</strong><small>Evaluated</small></div>
-          <div><strong>{{ stats.reads | number }}</strong><small>Analysed reads</small></div>
-        </div>
-        <label class="threshold">Evidence ≥ <input aria-label="Edit evidence threshold percent" type="number" min="0" max="100" step="0.5" [ngModel]="threshold" (ngModelChange)="setThreshold($event)"> % non-WT reads</label>
-        <p class="note">Screening threshold only; does not filter reads or alter analysis. Evidence across references does not establish joint editing in the same cell or complete knockout.</p>
-        <section class="profile"><h3>WT remaining & editing profile</h3>
+        <section class="combination-analysis">
+          <label>Compare<select aria-label="Combination metric" [(ngModel)]="metric"><option value="edited">Non-WT</option><option value="indel">Indel</option><option value="outOfFrame">Out-of-frame indel</option></select></label>
+          <ng-container *ngIf="combination as combo; else incomplete">
+            <h3>Editing balance</h3>
+            <div class="balance"><div><small>Lowest</small><strong>{{ combo.weakest.name }}</strong><span>{{ format(combo.weakest.rate) }}</span></div><div><small>Highest</small><strong>{{ combo.strongest.name }}</strong><span>{{ format(combo.strongest.rate) }}</span></div><div><small>Gap</small><strong>{{ combo.gap | number:'1.1-1' }} pp</strong></div></div>
+            <details class="model"><summary>Co-editing model · independence assumed</summary>
+              <p class="note">Hypothetical only. Treats read fractions as locus probabilities and assumes independent editing in one population. Not measured same-cell editing, genotype frequency or knockout.</p>
+              <div class="model-totals"><span>All {{ rows.length }} selected: <strong>{{ format(combo.all) }}</strong></span><span>At least one: <strong>{{ format(combo.any) }}</strong></span></div>
+              <div class="model-row" *ngFor="let item of combo.distribution"><span>{{ item.count }} / {{ rows.length }}</span><div class="model-track"><i [style.width.%]="item.percent"></i></div><strong>{{ format(item.percent) }}</strong></div>
+              <details><summary>Calculation</summary><p class="note">All = product of per-reference fractions. The distribution convolves independent edited/not-edited probabilities. No allele dosage, phasing, PCR bias or cell linkage is inferred. Separate amplicons cannot validate these assumptions.</p></details>
+            </details>
+          </ng-container>
+          <ng-template #incomplete><p class="note">{{ rows.length < 2 ? 'Select at least two references.' : 'Every selected reference needs aligned reads for this target.' }}</p></ng-template>
+        </section>
+        <section class="profile"><h3>Editing profile</h3>
           <div class="legend"><span *ngFor="let name of labels; let i = index"><i [style.background]="colors[i]"></i>{{ name }}</span></div>
           <div *ngFor="let row of rows" class="profile-row">
             <div class="row-heading"><button type="button" (click)="inspect.emit(row.name)" title="Show this reference in Standard">{{ row.name }} ↗</button><small>n = {{ row.reads | number }}</small><strong>{{ row.wt === null ? 'Not evaluated' : (row.wt | number:'1.1-1') + '% WT' }}</strong></div>
@@ -33,23 +39,23 @@ import { comparisonRows, comparisonSummary, FIGURE_COLORS, FigureSource } from '
               <span *ngFor="let value of [row.wt, row.substitution, row.inFrame, row.outOfFrame]; let i = index" [style.width.%]="value ?? 0" [style.background]="colors[i]" [title]="labels[i] + ': ' + (value ?? 0).toFixed(2) + '%'"></span>
             </div>
           </div>
-          <p class="note">Percentages use each target’s post-filter aligned reads. N/A is not WT. Reads are not cells or biological replicates.</p>
         </section>
-        <section><h3>Selected combination summary</h3>
+        <details><summary>Read summary</summary>
           <div class="summary-scroll"><table><thead><tr><th>Reference</th><th>WT</th><th>Sub.</th><th>In-frame</th><th>Out-of-frame</th></tr></thead>
           <tbody><tr *ngFor="let row of rows"><th>{{ row.name }}</th><td>{{ format(row.wt) }}</td><td>{{ format(row.substitution) }}</td><td>{{ format(row.inFrame) }}</td><td>{{ format(row.outOfFrame) }}</td></tr></tbody></table></div>
-          <p class="note" *ngIf="stats.mostWt">Most WT remaining: <strong>{{ stats.mostWt.name }} ({{ format(stats.mostWt.wt) }})</strong>. This is a read-level comparison, not a prediction of phenotype.</p>
-        </section>
+        </details>
         <details><summary>Major mutation groups by reference</summary>
           <div *ngFor="let row of rows" class="allele-summary"><strong>{{ row.name }}</strong>
             <div *ngFor="let group of row.target?.top_groups?.slice(0, 5)"><span>{{ group.classification }} · {{ group.net_indel > 0 ? '+' : '' }}{{ group.net_indel }} bp</span><span>{{ group.read_pct | number:'1.1-1' }}%</span></div>
             <small *ngIf="!row.target?.top_groups?.length">No groups available</small>
           </div><p class="note">Equal indel lengths do not establish a shared allele. Add cut-site sequences in Figure to compare the actual edits.</p>
         </details>
+        <details><summary>About these values</summary><p class="note">Each percentage uses that reference’s post-filter aligned reads. N/A is not WT. Read counts are not cells or biological replicates; out-of-frame edits do not establish loss of function. Editing balance compares the selected references without pooling their read depths.</p></details>
       </ng-container>
-      <ng-template #empty><div class="empty">Select references to compare.<br><small>Any combination; no exhaustive combination list.</small></div></ng-template>
+      <ng-template #empty><div class="empty">Select references to compare.</div></ng-template>
     </div>`,
   styles: [`
+    .balance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.balance>div{display:grid;align-content:start;gap:6px;padding:12px;background:#f8fafc;border-radius:8px;overflow-wrap:anywhere}.balance small{font-size:11px;color:#64748b}.balance strong{font-size:14px}.balance span{font-size:13px}.model-totals{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;margin:14px 0}.model-row{display:flex;align-items:center;gap:10px;font-size:11px;margin:9px 0}.model-row>span{min-width:45px}.model-row>strong{min-width:50px;text-align:right}.model-track{flex:1;background:#f1f5f9;height:14px;border-radius:3px;overflow:hidden}.model-track i{display:block;height:100%;background:#0072b2}.combination-analysis>label{max-width:220px;margin-bottom:18px}
     :host{display:block;min-width:0}.comparison{padding:18px}.selectors{display:flex;gap:12px}label{display:grid;gap:5px;font-size:11px;color:var(--color-text-secondary,#64748b)}.selectors label{flex:1;min-width:0}
     button,input,select{font:inherit;color:inherit;border:1px solid var(--color-border,#dbe1e8);background:var(--color-surface,#fff);border-radius:7px;padding:7px 10px;font-size:12px}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}select{width:100%;min-width:0}
     .selection-heading{display:flex;justify-content:space-between;align-items:center;margin:20px 0 10px;font-size:12px}.selection-heading button{border:0;padding:4px 7px;background:transparent}.reference-picker{display:flex;flex-wrap:wrap;gap:7px;max-height:150px;overflow:auto;padding:3px}.reference-picker .selected{border-color:#e9b34b;background:#fffbeb;color:#92400e}.context,.note{font-size:11px;line-height:1.6;color:var(--color-text-secondary,#64748b)}.context{margin:14px 0}
@@ -62,7 +68,8 @@ export class HomoeologComparisonComponent {
   @Input() genes: GeneResult[] = [];
   @Input() scopeLabel = '';
   @Output() inspect = new EventEmitter<string>();
-  group = ''; target = ''; selection: string[] | null = null; threshold = 2;
+  group = ''; target = ''; selection: string[] | null = null;
+  metric: 'edited' | 'indel' | 'outOfFrame' = 'edited';
   colors = FIGURE_COLORS.okabe;
   labels = ['WT', 'Substitution', 'In-frame indel', 'Out-of-frame indel'];
   get groupNames() { return [...new Set(this.genes.map(g => g.homoeolog_group || 'References'))]; }
@@ -72,11 +79,10 @@ export class HomoeologComparisonComponent {
   get activeTarget() { return this.targetIds.includes(this.target) ? this.target : this.targetIds[0] ?? ''; }
   get selectedNames() { return this.groupGenes.filter(g => this.selection === null || this.selection.includes(g.gene)).map(g => g.gene); }
   get rows() { return comparisonRows(this.groupGenes, this.selectedNames, this.activeTarget); }
-  get stats() { return comparisonSummary(this.rows, this.threshold); }
+  get combination() { return homeologCombination(this.rows, this.metric); }
   get figureSource(): FigureSource { return { label: `${this.scopeLabel} · ${this.activeGroup} · ${this.activeTarget}`, rows: this.rows }; }
   setGroup(value: string) { this.group = value; this.target = ''; this.selection = null; }
   chooseAll() { this.selection = null; }
   toggle(name: string) { const selected = this.selectedNames; this.selection = selected.includes(name) ? selected.filter(n => n !== name) : [...selected, name]; }
-  setThreshold(value: unknown) { const n = Number(value); this.threshold = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 2; }
   format(value: number | null) { return value === null ? 'N/A' : value.toFixed(1) + '%'; }
 }

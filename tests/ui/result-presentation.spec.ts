@@ -1,6 +1,6 @@
 import '@angular/compiler';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { comparisonRows, comparisonSummary, captureFigureSource, renderFigure, sequenceCells, moveFigurePanel, FigureOptions, withoutExcludedGroups } from '../../src/app/components/result-dashboard/result-presentation';
+import { comparisonRows, comparisonSummary, homeologCombination, captureFigureSource, renderFigure, sequenceCells, moveFigurePanel, FigureOptions, withoutExcludedGroups } from '../../src/app/components/result-dashboard/result-presentation';
 import { groupKey } from '../../src/app/models/curation.model';
 import { HomoeologComparisonComponent } from '../../src/app/components/result-dashboard/homoeolog-comparison.component';
 import { FigureComposerComponent } from '../../src/app/components/result-dashboard/figure-composer.component';
@@ -51,10 +51,25 @@ describe('presentation-only homoeolog comparison', () => {
     component.selection = []; expect(component.rows).toEqual([]); component.chooseAll(); expect(component.rows.length).toBe(12);
     component.genes.push({ ...gene('Other'), homoeolog_group: 'Gene2' }); component.setGroup('Gene2'); expect(component.rows.map(r => r.name)).toEqual(['Other']);
   });
-  it('applies threshold only to evidence count, not read fractions', () => {
-    const component = new HomoeologComparisonComponent(); component.genes = [gene('A')]; const rows = structuredClone(component.rows);
-    component.setThreshold(90); expect(component.stats.withEvidence).toBe(0); expect(component.rows).toEqual(rows);
-    component.setThreshold(-10); expect(component.threshold).toBe(0); component.setThreshold('invalid'); expect(component.threshold).toBe(2);
+  it('compares an arbitrary combination and models independent events without modifying read fractions', () => {
+    const rows = source().rows, original = structuredClone(rows), combo = homeologCombination(rows)!;
+    expect(combo.weakest.name).toBe('7D'); expect(combo.gap).toBe(30);
+    expect(combo.all).toBeCloseTo(10); expect(combo.any).toBeCloseTo(60);
+    expect(combo.distribution.map(d => d.percent)).toEqual([40, 50, 10]);
+    expect(rows).toEqual(original);
+    expect(homeologCombination(rows, 'indel')!.all).toBeCloseTo(6.75);
+  });
+  it('does not silently ignore missing targets, zero depth or a single selection', () => {
+    expect(homeologCombination(comparisonRows([gene('A'),gene('B',50,0)], ['A','B'], 't1'))).toBeNull();
+    expect(homeologCombination(source().rows.slice(0,1))).toBeNull();
+    expect(homeologCombination([])).toBeNull();
+  });
+  it('normalizes the independent count distribution at 0/100 percent and with many loci', () => {
+    const rows = comparisonRows(Array.from({length:20}, (_,i)=>gene(`R${i}`,50)), Array.from({length:20},(_,i)=>`R${i}`),'t1');
+    const result = homeologCombination(rows)!;
+    expect(result.distribution.reduce((n,d)=>n+d.percent,0)).toBeCloseTo(100);
+    const extremes = rows.slice(0,2).map((row,i)=>({...row,edited:i*100}));
+    expect(homeologCombination(extremes)!.distribution.map(d=>d.percent)).toEqual([0,100,0]);
   });
   it('excludes restorable curated groups from comparison and figures without modifying the original', () => {
     const g = gene('A'), key = groupKey('A', 't1', g.analysis_result.targets[0].top_groups[0].read_inner);
@@ -145,14 +160,16 @@ describe('two-visible-pane workspace', () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
   function setup() {
     vi.useFakeTimers(); vi.stubGlobal('window', {matchMedia: () => ({matches:false})});
-    const state: any = { normalGenes:[gene('A'),gene('B')], lastRunParams:{homoeologMode:true}, allFileResults:[], selectedScopeIndex:-1 };
+    const state: any = { normalGenes:[gene('A'),gene('B')], genes:[gene('A'),gene('B')], currentGene:gene('A'), selectedTarget:gene('A').analysis_result.targets[0], lastRunParams:{homoeologMode:true}, allFileResults:[], selectedScopeIndex:-1 };
     const dashboard = new ResultDashboardComponent(state, {detectChanges:vi.fn()} as any, {run:(f: any)=>f()} as any);
     const panels = [{hidden:false,clientWidth:492,offsetLeft:0},{hidden:false,clientWidth:492,offsetLeft:508},{hidden:false,clientWidth:492,offsetLeft:1016}];
     const track = {children:panels,clientWidth:1000,scrollTo:vi.fn()}; dashboard.workspaceTrack = {nativeElement:track} as any;
     return {dashboard,track,panels};
   }
-  it('shows Standard and Figure when no comparison is open', () => {
-    const {dashboard} = setup(); dashboard.standardFigureOpen = true; expect(dashboard.workspacePanes).toEqual(['standard','analysis-figure']);
+  it('opens one shared Figure workspace, not additional result cards', () => {
+    const {dashboard} = setup(); dashboard.toggleFigure();
+    expect(dashboard.showFigure).toBe(true); expect(dashboard.workspacePanes).toEqual(['standard']);
+    expect(dashboard.figureInitialSource.rows[0].name).toBe('A');
   });
   it('makes Homeolog comparison available only for Homeolog-mode results', () => {
     const {dashboard} = setup();
@@ -160,24 +177,19 @@ describe('two-visible-pane workspace', () => {
     (dashboard.state as any).lastRunParams = {homoeologMode:false};
     expect(dashboard.hasHomoeologResults).toBe(false);
   });
-  it('scrolls to Homeo + Figure, not three compressed columns', () => {
-    const {dashboard,track} = setup(); dashboard.homoeologOpen = true; dashboard.homoeologFigureOpen = true;
-    dashboard.focusWorkspace('homeo-figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:508,behavior:'smooth'});
-  });
-  it('ignores hidden panes when navigating Standard + Figure', () => {
-    const {dashboard,track,panels} = setup(); dashboard.standardFigureOpen = true; panels[1].hidden = true;
-    dashboard.focusWorkspace('analysis-figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:0,behavior:'smooth'});
-  });
-  it('opens four independent cards when both figure editors are open', () => {
-    const {dashboard} = setup(); dashboard.homoeologOpen = true; dashboard.standardFigureOpen = true; dashboard.homoeologFigureOpen = true;
-    expect(dashboard.workspacePanes).toEqual(['standard','homoeolog','analysis-figure','homeo-figure']);
+  it('uses the selected combination as the initial shared source', () => {
+    const {dashboard} = setup(); dashboard.homoeologOpen = true;
+    dashboard.comparison = {figureSource:source()} as any; dashboard.toggleFigure();
+    expect(dashboard.figureInitialSource.rows).toHaveLength(2);
+    expect(dashboard.workspacePanes).toEqual(['standard','homoeolog']);
+    dashboard.toggleFigure(); expect(dashboard.showFigure).toBe(false); expect(dashboard.showHomoeolog).toBe(true);
   });
   it('uses one visible pane on narrow viewports', () => {
-    const {dashboard,track,panels} = setup(); panels.forEach(p=>p.clientWidth=1000); dashboard.homoeologOpen = true; dashboard.homoeologFigureOpen = true;
-    dashboard.focusWorkspace('homeo-figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:1016,behavior:'smooth'});
+    const {dashboard,track,panels} = setup(); panels.forEach(p=>p.clientWidth=1000); dashboard.homoeologOpen = true;
+    dashboard.focusWorkspace('homoeolog'); expect(track.scrollTo).toHaveBeenCalledWith({left:508,behavior:'smooth'});
   });
   it('returns from the rightmost pair to Standard + Homeo in one header drag', () => {
-    const {dashboard,track,panels} = setup(); dashboard.homoeologOpen = true; dashboard.homoeologFigureOpen = true;
+    const {dashboard,track,panels} = setup(); dashboard.homoeologOpen = true;
     Object.assign(track, {scrollLeft:508, firstElementChild:panels[0]}); dashboard.activeWorkspacePane = 'figure';
     dashboard.beginWorkspaceSwipe({target:{closest:()=>null}, currentTarget:{setPointerCapture:vi.fn()}, button:0, clientX:100,pointerId:1} as any);
     dashboard.endWorkspaceSwipe({clientX:250,pointerId:1} as any);

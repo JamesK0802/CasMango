@@ -408,10 +408,10 @@ describe('Results guide entry and readiness', () => {
   it('lets users explore Figure controls and reorder panels without a task gate', () => {
     const { guide, nodes } = setup(); step(guide, 'result-figure-homeo', 'result');
     expect(guide.isCurrentActionCompleted).toBe(true);
-    const e = event(['.figure-pane', '.panel-item'], 'dragstart'); (guide as any).guardInteraction(e);
+    const e = event(['.figure-workspace', '.panel-item'], 'dragstart'); (guide as any).guardInteraction(e);
     expect(e.preventDefault).not.toHaveBeenCalled();
-    nodes.set('#guide-homeo-figure[aria-pressed="true"]', {});
-    expect(guide.currentStepTargetSelector).toBe('#guide-homeo-figure-pane');
+    nodes.set('#guide-figure-btn[aria-pressed="true"]', {});
+    expect(guide.currentStepTargetSelector).toBe('#guide-figure-workspace');
     expect(guide.resultSteps.map(s => s.id)).not.toContain('result-figure-both');
   });
 });
