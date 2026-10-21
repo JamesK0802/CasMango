@@ -5226,3 +5226,21 @@ select.form-control {
     width: 100%;
   }
 }
+
+/* Result cards own vertical scrolling; the page shell never adds a second scroll. */
+.app-content:has(.results-dashboard){height:calc(100dvh - 56px);min-height:0;overflow:hidden;flex:none}
+.app-content:has(.results-dashboard) .crispr-shell{height:100%;min-height:0;overflow:hidden}
+.app-content:has(.results-dashboard) .crispr-body{height:100%;min-height:0;padding-top:12px;padding-bottom:12px;overflow:hidden}
+.app-content:has(.results-dashboard) .app-footer{display:none}
+.app-content:has(.results-dashboard) app-analysis-page,
+.app-content:has(.results-dashboard) app-result-viewer-page{display:block;height:100%;min-height:0}
+.analysis-page:has(.results-dashboard),.viewer-page:has(.results-dashboard){height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.analysis-page:has(.results-dashboard) .analysis-tabs-bar{flex-shrink:0;margin-bottom:12px}
+app-result-dashboard:has(.results-dashboard){display:block;flex:1;min-height:0;overflow:hidden}
+body:has(.guide-root.result-tour) .app-content:has(.results-dashboard){height:calc(100dvh - 260px)}
+@media(max-width:760px){
+  .results-dashboard .export-bar{display:flex!important;gap:6px;flex-wrap:wrap}
+  .results-dashboard .mobile-top-bar{display:none}
+  .results-dashboard .left-actions,.results-dashboard .right-actions{display:flex!important;gap:6px!important;flex-wrap:wrap}
+  .results-dashboard .export-bar button{padding:6px 9px;font-size:11px;min-height:30px}
+}

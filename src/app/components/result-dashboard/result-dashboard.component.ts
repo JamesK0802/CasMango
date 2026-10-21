@@ -50,7 +50,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     }
     return this.presentationCache.projected;
   }
-  get workspacePanes(): string[] { return ['standard', ...(this.showHomoeolog ? ['homoeolog'] : []), ...(this.showFigure ? ['figure'] : [])]; }
+  get workspacePanes(): string[] { return ['standard', ...(this.showHomoeolog ? ['homoeolog'] : []), ...(this.standardFigureOpen ? ['analysis-figure'] : []), ...(this.homoeologFigureOpen ? ['homeo-figure'] : [])]; }
   get scopeLabel(): string {
     const file = this.state.allFileResults[this.state.selectedScopeIndex];
     const name = this.state.selectedScopeIndex === -1 ? 'All merged' : (file?.fastq_file?.split('/').pop() || 'Results');
@@ -72,7 +72,9 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   toggleFigure(origin: 'standard' | 'homoeolog'): void {
     if (origin === 'standard') this.standardFigureOpen = !this.standardFigureOpen;
     else this.homoeologFigureOpen = !this.homoeologFigureOpen;
-    this.cdr.detectChanges(); this.focusWorkspace(this.showFigure ? 'figure' : (this.showHomoeolog ? 'homoeolog' : 'standard'));
+    const opened = origin === 'standard' ? this.standardFigureOpen : this.homoeologFigureOpen;
+    this.cdr.detectChanges();
+    this.focusWorkspace(opened ? (origin === 'standard' ? 'analysis-figure' : 'homeo-figure') : (origin === 'standard' ? 'standard' : 'homoeolog'));
   }
   focusWorkspace(pane: string): void {
     const track = this.workspaceTrack?.nativeElement;

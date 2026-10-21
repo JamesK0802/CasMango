@@ -129,23 +129,23 @@ describe('two-visible-pane workspace', () => {
     return {dashboard,track,panels};
   }
   it('shows Standard and Figure when no comparison is open', () => {
-    const {dashboard} = setup(); dashboard.standardFigureOpen = true; expect(dashboard.workspacePanes).toEqual(['standard','figure']);
+    const {dashboard} = setup(); dashboard.standardFigureOpen = true; expect(dashboard.workspacePanes).toEqual(['standard','analysis-figure']);
   });
   it('scrolls to Homeo + Figure, not three compressed columns', () => {
     const {dashboard,track} = setup(); dashboard.homoeologOpen = true; dashboard.homoeologFigureOpen = true;
-    dashboard.focusWorkspace('figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:508,behavior:'smooth'});
+    dashboard.focusWorkspace('homeo-figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:508,behavior:'smooth'});
   });
   it('ignores hidden panes when navigating Standard + Figure', () => {
     const {dashboard,track,panels} = setup(); dashboard.standardFigureOpen = true; panels[1].hidden = true;
-    dashboard.focusWorkspace('figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:0,behavior:'smooth'});
+    dashboard.focusWorkspace('analysis-figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:0,behavior:'smooth'});
   });
-  it('keeps a single Figure column when both editors are open', () => {
+  it('opens four independent cards when both figure editors are open', () => {
     const {dashboard} = setup(); dashboard.homoeologOpen = true; dashboard.standardFigureOpen = true; dashboard.homoeologFigureOpen = true;
-    expect(dashboard.workspacePanes).toEqual(['standard','homoeolog','figure']);
+    expect(dashboard.workspacePanes).toEqual(['standard','homoeolog','analysis-figure','homeo-figure']);
   });
   it('uses one visible pane on narrow viewports', () => {
     const {dashboard,track,panels} = setup(); panels.forEach(p=>p.clientWidth=1000); dashboard.homoeologOpen = true; dashboard.homoeologFigureOpen = true;
-    dashboard.focusWorkspace('figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:1016,behavior:'smooth'});
+    dashboard.focusWorkspace('homeo-figure'); expect(track.scrollTo).toHaveBeenCalledWith({left:1016,behavior:'smooth'});
   });
   it('returns from the rightmost pair to Standard + Homeo in one header drag', () => {
     const {dashboard,track,panels} = setup(); dashboard.homoeologOpen = true; dashboard.homoeologFigureOpen = true;

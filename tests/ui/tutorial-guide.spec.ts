@@ -398,10 +398,10 @@ describe('Results guide entry and readiness', () => {
     expect(guide.isCurrentActionCompleted).toBe(true); expect((guide as any).allowedSelectors()).toEqual([]);
   });
 
-  it('requires a standard panel and the stacked layout to complete the two-editor step', () => {
+  it('requires a standard panel and an independent homeo figure card', () => {
     const { guide, nodes } = setup(); step(guide, 'result-figure-both', 'result');
     nodes.set('[data-figure-source="standard"]', { getAttribute: () => '1' });
-    expect(guide.isCurrentActionCompleted).toBe(false); nodes.set('.stacked-editors', {});
+    expect(guide.isCurrentActionCompleted).toBe(false); nodes.set('#guide-homeo-figure-pane:not([hidden])', {});
     expect(guide.isCurrentActionCompleted).toBe(true);
   });
 });

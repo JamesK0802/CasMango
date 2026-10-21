@@ -44,7 +44,7 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.workspace-tour]="guideMode === 'workspace' || (currentStep.id === 'window-check' && windowCheckOpened)" [class.no-target]="!targetRect" tabindex="-1">
+    <div class="guide-root" [class.result-tour]="guideMode === 'result' && !currentStep.isIntro && !currentStep.isFinal" [class.workspace-tour]="guideMode === 'workspace' || (guideMode === 'result' && !currentStep.isIntro && !currentStep.isFinal) || (currentStep.id === 'window-check' && windowCheckOpened)" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
@@ -430,6 +430,9 @@ export interface GuideStep {
     .workspace-tour .bubble-content { padding: 12px 16px; }
     .workspace-tour .bubble-headline { font-size: 17px; margin-bottom: 6px; }
     .workspace-tour .text-line { margin: 4px 0; }
+    .workspace-tour .text-lines-block { margin-bottom: 4px; }
+    .workspace-tour .interactive-status-row { margin: 4px 0; }
+    .workspace-tour .status-pill { padding: 6px 10px; font-size: 11.5px; }
     .workspace-tour .guide-dialog-wrapper { flex-direction: row; }
     .workspace-tour .bubble-footer { margin-top: 8px; padding-top: 8px; }
     .workspace-tour .arrow-svg-layer { display: none; }
@@ -1506,7 +1509,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Data Curation',
       headline: 'Interactive Curation View',
       textLines: [
-        'Create a separate curated view. Next, you will exclude one example group and restore it while watching the counts and charts update.'
+        'Create a separate curated view. Exclude and restore a group to update counts. Indel threshold is also adjustable here without rerunning alignment.'
       ],
       targetSelector: '#guide-curate-btn',
       interactiveAction: 'test_curation',
@@ -1531,9 +1534,9 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
     {
       id: 'result-homeo-open', stageName: 'Optional Comparison', headline: 'Keep results beside a comparison',
-      textLines: ['Open Homoeolog comparison without replacing Standard. CPC and TRY are unrelated toy references used here only to demonstrate the controls.'],
+      textLines: ['Click Add Homeo Analysis beside Create Curated View to keep both results side by side. CPC and TRY are unrelated toy references used here only to demonstrate the controls.'],
       targetSelector: '#guide-open-homeo', interactiveAction: 'homeo_open',
-      actionPromptText: 'Open Homoeolog comparison', actionSuccessText: 'Both result windows are available.', nextButtonText: 'Next: Choose a Combination ▶'
+      actionPromptText: 'Click Add Homeo Analysis', actionSuccessText: 'Both result windows are available.', nextButtonText: 'Next: Choose a Combination ▶'
     },
     {
       id: 'result-homeo-select', stageName: 'Choose a Combination', headline: 'Compare only the references you select',
@@ -1543,15 +1546,15 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'result-figure-homeo', stageName: 'Figure Panels', headline: 'Make a figure from this combination',
-      textLines: ['Click Figure in the comparison header, then + Add panel. The figure captures this selection without changing results. Use the left window rail to move between results, comparison and figure; only two fit side by side.'],
+      textLines: ['Click Homoeolog figure at the bottom of the comparison card, then + Add panel. A separate figure card opens. With three or more cards, use the window rail to move between them.'],
       targetSelector: '#guide-homeo-figure', interactiveAction: 'figure_homeo',
       actionPromptText: 'Open Figure, then add a mutation-profile panel', actionSuccessText: 'Comparison panel added to the figure draft.', nextButtonText: 'Next: Both Figure Editors ▶'
     },
     {
-      id: 'result-figure-both', stageName: 'Figure Workspace', headline: 'Two figure editors, stacked vertically',
-      textLines: ['Open the Standard Figure using the toolbar, then add its panel. Both editors share one workspace column, stacked top and bottom. Titles, panel order and layout can be changed; SVG and PNG exports are available outside this guided step.'],
+      id: 'result-figure-both', stageName: 'Figure Workspace', headline: 'Two independent figure cards',
+      textLines: ['Click Analysis figure below Results, then + Add panel. Each editor has its own card; use the rail to switch. SVG / PNG export is available outside the guide.'],
       targetSelector: '#guide-standard-figure', interactiveAction: 'figure_both',
-      actionPromptText: 'Open Standard Figure, then add its panel', actionSuccessText: 'Both independent figure drafts are visible in one column.', nextButtonText: 'Next: Export Reports ▶'
+      actionPromptText: 'Open Standard Figure, then add its panel', actionSuccessText: 'Both figure drafts have their own card.', nextButtonText: 'Next: Export Reports ▶'
     },
 
     // ── R6. Export Excel Reports ──
@@ -1689,7 +1692,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       case 'homeo_open': return !!document.querySelector('#guide-open-homeo[aria-pressed="true"]');
       case 'homeo_select': return !!document.querySelector('#guide-homeo-comparison[data-selection-count="1"] #guide-homeo-second-reference[aria-pressed="false"]');
       case 'figure_homeo': return Number(document.querySelector('[data-figure-source="homoeolog"]')?.getAttribute('data-panel-count') || 0) > 0;
-      case 'figure_both': return Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) > 0 && !!document.querySelector('.stacked-editors');
+      case 'figure_both': return Number(document.querySelector('[data-figure-source="standard"]')?.getAttribute('data-panel-count') || 0) > 0 && !!document.querySelector('#guide-homeo-figure-pane:not([hidden])');
       case 'exclude_group': return this.excludedExample;
       case 'restore_group': return this.restoredExample;
       case 'click_export':
@@ -1873,7 +1876,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
     if (['result-homeo-open', 'result-homeo-select', 'result-figure-homeo', 'result-figure-both'].includes(this.currentStep.id)) {
       this.later(() => {
-        document.querySelector(this.currentStepTargetSelector!)?.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+        this.revealResultTarget();
         this.cdr.detectChanges(); this.updateLayoutInstant();
       }, 300);
     }
@@ -2527,11 +2530,12 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       this.clickInternally('#guide-homeo-select-all');
     }
     if (step.id === 'result-export-report') {
-      this.clickInternally('#guide-close-figure');
+      if (document.querySelector('#guide-standard-figure[aria-pressed="true"]')) this.clickInternally('#guide-close-analysis-figure');
+      if (document.querySelector('#guide-homeo-figure[aria-pressed="true"]')) this.clickInternally('#guide-close-homeo-figure');
       if (document.querySelector('#guide-open-homeo[aria-pressed="true"]')) this.clickInternally('#guide-open-homeo');
     }
     if (['result-homeo-open', 'result-homeo-select', 'result-figure-homeo', 'result-figure-both'].includes(step.id)) {
-      this.later(() => document.querySelector(this.currentStepTargetSelector!)?.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' }), 100);
+      this.later(() => this.revealResultTarget(), 100);
     }
     if (step.id === 'result-viewer-reproduce' && !this.viewerPrepared) {
       this.restorePreview = { slot: this.state.viewerSlot, config: this.state.curationConfig,
@@ -2663,6 +2667,27 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   /**
    * Smoothly scroll target into view if needed, and place guide dialog.
    */
+  private revealResultTarget() {
+    const el = document.querySelector(this.currentStepTargetSelector || '') as HTMLElement | null;
+    if (!el) return;
+    const pane = el.closest('.workspace-pane') as HTMLElement | null;
+    const track = pane?.parentElement;
+    if (pane && track) {
+      const panes = Array.from(track.children).filter((p: any) => !p.hidden) as HTMLElement[];
+      const visible = pane.clientWidth < track.clientWidth * .75 ? 2 : 1;
+      const index = Math.min(panes.indexOf(pane), Math.max(0, panes.length - visible));
+      track.scrollTo({ left: panes[index].offsetLeft - panes[0].offsetLeft, top: 0, behavior: 'auto' });
+      const body = el.closest('.workspace-pane-body, .figure-editor-scroll') as HTMLElement | null;
+      if (body && body !== el) {
+        const bounds = body.getBoundingClientRect(), target = el.getBoundingClientRect();
+        body.scrollTop += target.top - bounds.top - Math.max(0, (bounds.height - target.height) / 2);
+      }
+    }
+    const dialog = document.querySelector('.guide-dialog-wrapper') as HTMLElement | null;
+    if (dialog) dialog.scrollTop = 0;
+    this.updateLayoutInstant();
+  }
+
   private onStepChanged() {
     this.cdr.detectChanges();
 
@@ -2670,6 +2695,12 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (sel) {
       const el = document.querySelector(sel) as HTMLElement;
       if (el) {
+        if (this.guideMode === 'result') {
+          this.revealResultTarget();
+          this.updateLayoutInstant();
+          this.later(() => this.updateLayoutInstant(), 320);
+          return;
+        }
         const dialogEl = document.querySelector('.guide-dialog-wrapper') as HTMLElement;
         const dialogHeight = dialogEl ? dialogEl.offsetHeight : 280;
         const rect = el.getBoundingClientRect();
