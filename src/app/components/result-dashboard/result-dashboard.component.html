@@ -69,7 +69,8 @@
   </div>
 
   <div class="export-bar" style="justify-content: space-between;">
-    <div class="left-actions" style="display: flex; gap: 12px;">
+    <div class="left-actions" style="display: flex; gap: 6px; align-items: center;">
+      <ng-content select="[result-session-menu]"></ng-content>
       <!-- Curate / Exit Button -->
       <button *ngIf="!state.isCuratedView" type="button" class="btn-curate" id="guide-curate-btn"
         (click)="enterCuratedView()" [disabled]="state.mergedGenes.length === 0">
@@ -83,7 +84,7 @@
       <button type="button" id="guide-figure-btn" class="btn-new-analysis" [attr.aria-pressed]="figureOpen" (click)="toggleFigure()">{{ figureOpen ? 'Back to results' : 'Figure' }}</button>
     </div>
 
-    <div class="right-actions" style="display: flex; gap: 12px;">
+    <div class="right-actions" style="display: flex; gap: 6px; align-items: center;">
       <button *ngIf="state.activeMode === 'analysis'" type="button" class="btn-new-analysis"
         (click)="state.newAnalysis()">
         New Analysis

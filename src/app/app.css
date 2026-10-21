@@ -5230,7 +5230,7 @@ select.form-control {
 /* Result cards own vertical scrolling; the page shell never adds a second scroll. */
 .app-content:has(.results-dashboard){height:calc(100dvh - 56px);min-height:0;overflow:hidden;flex:none}
 .app-content:has(.results-dashboard) .crispr-shell{height:100%;min-height:0;overflow:hidden}
-.app-content:has(.results-dashboard) .crispr-body{height:100%;min-height:0;padding-top:12px;padding-bottom:12px;overflow:hidden}
+.app-content:has(.results-dashboard) .crispr-body{height:100%;min-height:0;padding-top:6px;padding-bottom:6px;overflow:hidden}
 .app-content:has(.results-dashboard) .app-footer{display:none}
 .app-content:has(.results-dashboard) app-analysis-page,
 .app-content:has(.results-dashboard) app-result-viewer-page{display:block;height:100%;min-height:0}

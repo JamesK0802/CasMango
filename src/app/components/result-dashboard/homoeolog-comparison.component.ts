@@ -18,16 +18,12 @@ import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource } from
       </div>
       <ng-container *ngIf="rows.length; else empty">
         <section class="combination-analysis">
-          <label>Compare<select aria-label="Combination metric" [(ngModel)]="metric"><option value="edited">Non-WT</option><option value="indel">Indel</option><option value="outOfFrame">Out-of-frame indel</option></select></label>
+          <h3>Co-editing model <small>· Non-WT · independence assumed</small></h3>
           <ng-container *ngIf="combination as combo; else incomplete">
-            <h3>Editing balance</h3>
-            <div class="balance"><div><small>Lowest</small><strong>{{ combo.weakest.name }}</strong><span>{{ format(combo.weakest.rate) }}</span></div><div><small>Highest</small><strong>{{ combo.strongest.name }}</strong><span>{{ format(combo.strongest.rate) }}</span></div><div><small>Gap</small><strong>{{ combo.gap | number:'1.1-1' }} pp</strong></div></div>
-            <details class="model"><summary>Co-editing model · independence assumed</summary>
-              <p class="note">Hypothetical only. Treats read fractions as locus probabilities and assumes independent editing in one population. Not measured same-cell editing, genotype frequency or knockout.</p>
+            <div class="model">
               <div class="model-totals"><span>All {{ rows.length }} selected: <strong>{{ format(combo.all) }}</strong></span><span>At least one: <strong>{{ format(combo.any) }}</strong></span></div>
               <div class="model-row" *ngFor="let item of combo.distribution"><span>{{ item.count }} / {{ rows.length }}</span><div class="model-track"><i [style.width.%]="item.percent"></i></div><strong>{{ format(item.percent) }}</strong></div>
-              <details><summary>Calculation</summary><p class="note">All = product of per-reference fractions. The distribution convolves independent edited/not-edited probabilities. No allele dosage, phasing, PCR bias or cell linkage is inferred. Separate amplicons cannot validate these assumptions.</p></details>
-            </details>
+            </div>
           </ng-container>
           <ng-template #incomplete><p class="note">{{ rows.length < 2 ? 'Select at least two references.' : 'Every selected reference needs aligned reads for this target.' }}</p></ng-template>
         </section>
@@ -40,17 +36,16 @@ import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource } from
             </div>
           </div>
         </section>
-        <details><summary>Read summary</summary>
+        <details open><summary>Read summary</summary>
           <div class="summary-scroll"><table><thead><tr><th>Reference</th><th>WT</th><th>Sub.</th><th>In-frame</th><th>Out-of-frame</th></tr></thead>
           <tbody><tr *ngFor="let row of rows"><th>{{ row.name }}</th><td>{{ format(row.wt) }}</td><td>{{ format(row.substitution) }}</td><td>{{ format(row.inFrame) }}</td><td>{{ format(row.outOfFrame) }}</td></tr></tbody></table></div>
         </details>
-        <details><summary>Major mutation groups by reference</summary>
+        <details open><summary>Major mutation groups by reference</summary>
           <div *ngFor="let row of rows" class="allele-summary"><strong>{{ row.name }}</strong>
             <div *ngFor="let group of row.target?.top_groups?.slice(0, 5)"><span>{{ group.classification }} · {{ group.net_indel > 0 ? '+' : '' }}{{ group.net_indel }} bp</span><span>{{ group.read_pct | number:'1.1-1' }}%</span></div>
             <small *ngIf="!row.target?.top_groups?.length">No groups available</small>
-          </div><p class="note">Equal indel lengths do not establish a shared allele. Add cut-site sequences in Figure to compare the actual edits.</p>
+          </div>
         </details>
-        <details><summary>About these values</summary><p class="note">Each percentage uses that reference’s post-filter aligned reads. N/A is not WT. Read counts are not cells or biological replicates; out-of-frame edits do not establish loss of function. Editing balance compares the selected references without pooling their read depths.</p></details>
       </ng-container>
       <ng-template #empty><div class="empty">Select references to compare.</div></ng-template>
     </div>`,
@@ -69,7 +64,6 @@ export class HomoeologComparisonComponent {
   @Input() scopeLabel = '';
   @Output() inspect = new EventEmitter<string>();
   group = ''; target = ''; selection: string[] | null = null;
-  metric: 'edited' | 'indel' | 'outOfFrame' = 'edited';
   colors = FIGURE_COLORS.okabe;
   labels = ['WT', 'Substitution', 'In-frame indel', 'Out-of-frame indel'];
   get groupNames() { return [...new Set(this.genes.map(g => g.homoeolog_group || 'References'))]; }
@@ -79,7 +73,7 @@ export class HomoeologComparisonComponent {
   get activeTarget() { return this.targetIds.includes(this.target) ? this.target : this.targetIds[0] ?? ''; }
   get selectedNames() { return this.groupGenes.filter(g => this.selection === null || this.selection.includes(g.gene)).map(g => g.gene); }
   get rows() { return comparisonRows(this.groupGenes, this.selectedNames, this.activeTarget); }
-  get combination() { return homeologCombination(this.rows, this.metric); }
+  get combination() { return homeologCombination(this.rows); }
   get figureSource(): FigureSource { return { label: `${this.scopeLabel} · ${this.activeGroup} · ${this.activeTarget}`, rows: this.rows }; }
   setGroup(value: string) { this.group = value; this.target = ''; this.selection = null; }
   chooseAll() { this.selection = null; }

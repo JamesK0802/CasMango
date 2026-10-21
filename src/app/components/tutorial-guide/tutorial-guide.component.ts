@@ -1517,7 +1517,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
     {
       id: 'result-homeo-open', stageName: 'Optional Analysis', headline: 'Explore Homeolog analysis',
-      textLines: ['Available in Homeolog mode. Choose a combination to compare editing balance. Explore the co-editing model if useful: it assumes independent editing, not measured same-cell editing.'],
+      textLines: ['Available in Homeolog mode. Choose references to explore the co-editing model, editing profiles and mutation groups. The model assumes independent editing.'],
       targetSelector: '#guide-open-homeo', nextButtonText: 'Next: Figure workspace ▶'
     },
     {

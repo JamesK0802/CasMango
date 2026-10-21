@@ -47,7 +47,8 @@
 /* Optional presentation workspace. Analysis and original result DOM stay intact. */
 .results-dashboard{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
 .results-dashboard>.export-bar,.results-dashboard>.mobile-top-bar,.curated-banner,.curated-threshold-bar{flex-shrink:0}
-.results-dashboard>.export-bar{margin-bottom:12px}
+.results-dashboard>.export-bar{align-items:center;gap:8px;padding:0;margin-bottom:8px;flex-wrap:wrap}
+.results-dashboard>.export-bar button{min-height:30px;padding:6px 10px;font-size:12px;border-radius:7px;line-height:1.2}
 .workspace-pane-footer{flex-shrink:0;display:flex;justify-content:flex-end;padding:7px 12px;border-top:1px solid var(--color-border-light,#e2e8f0);cursor:grab}
 .workspace-pane-footer button{font:inherit;font-size:11px;padding:5px 9px;border:1px solid #dbe1e8;border-radius:7px;background:#fff;color:#64748b;cursor:pointer}
 .workspace-label{font-size:10px;font-weight:700;letter-spacing:.09em;color:var(--color-text-tertiary,#94a3b8);margin-right:auto}
