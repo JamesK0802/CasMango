@@ -129,7 +129,6 @@ interface ReferenceExcelRow { homoeologName: string; geneName: string; geneSeq: 
 })
 export class AnalysisPageComponent implements OnInit, OnDestroy {
   sessionTabsOpen = false;
-  tabsHovered = false;
   showUploadChoices = false;
   isReadingFolders = false;
   isCopyingFiles = false;
@@ -341,6 +340,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
     this.resultsUpdateSub = this.state.resultsUpdated$.subscribe(() => {
       if (this.lastActiveTabId !== this.state.activeTabId) {
         this.lastActiveTabId = this.state.activeTabId;
+        this.sessionTabsOpen = false;
         this.collapseAllPanels();
       }
       this.cdr.detectChanges();
@@ -1258,6 +1258,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   runAnalysis() {
+    this.sessionTabsOpen = false;
     this.state.saveActiveReferenceConfig();
     const rawValue = this.state.analysisForm.value;
     const formInvalid = this.state.analysisForm.get('interestRegion')?.invalid;

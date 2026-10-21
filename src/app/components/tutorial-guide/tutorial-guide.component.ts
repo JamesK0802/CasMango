@@ -1056,7 +1056,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       stageName: 'Analysis Tabs',
       headline: 'Open a Guide Analysis Tab',
       textLines: [
-        'Keep independent analyses in separate tabs. In results, hover over Analyses or tap it to switch sessions.'
+        'Keep independent analyses in separate tabs. In results, click the current analysis name to show or hide the tabs.'
       ],
       targetSelector: '#guide-tabs-bar',
       interactiveAction: 'create_guide_tab',

@@ -1,8 +1,8 @@
 <div class="analysis-page">
   <!-- ══════════════ ANALYSIS TAB BAR ══════════════ -->
-  <div class="analysis-session-switcher" [class.compact]="state.genes.length > 0" [class.expanded]="sessionTabsOpen || tabsHovered" (mouseenter)="tabsHovered = true" (mouseleave)="tabsHovered = false">
-  <button *ngIf="state.genes.length > 0" type="button" class="session-trigger" [attr.aria-expanded]="sessionTabsOpen || tabsHovered" aria-controls="guide-tabs-bar" (click)="sessionTabsOpen = !sessionTabsOpen">Analyses ▾</button>
-  <div class="analysis-tabs-bar" id="guide-tabs-bar" (keydown.escape)="sessionTabsOpen = false; tabsHovered = false">
+  <div class="analysis-session-switcher" [class.compact]="state.genes.length > 0" [class.expanded]="sessionTabsOpen">
+  <button *ngIf="state.genes.length > 0" type="button" class="session-trigger" [attr.aria-expanded]="sessionTabsOpen" aria-controls="guide-tabs-bar" (click)="sessionTabsOpen = !sessionTabsOpen"><span>{{ state.currentTab?.name || 'Analysis' }}</span><span class="session-chevron" aria-hidden="true" [class.open]="sessionTabsOpen">⌄</span></button>
+  <div class="analysis-tabs-bar" id="guide-tabs-bar" (keydown.escape)="sessionTabsOpen = false">
     <div class="tabs-scroll-container">
       <div *ngFor="let tab of state.tabs"
            class="analysis-tab-item"
