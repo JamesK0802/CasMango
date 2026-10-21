@@ -43,6 +43,17 @@ describe('guided interaction boundaries', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
+  it.each(['analysis', 'result', 'workspace', 'benchmark'] as const)('ends %s with only a centered completion heading and navigation', mode => {
+    const { guide } = setup(); guide.guideMode = mode;
+    guide.currentStepIndex = guide.currentSteps.findIndex(s => s.isFinal);
+    expect(guide.currentStep.headline).toBe('Guide Completed');
+    expect(guide.currentStep.textLines).toBeUndefined();
+    expect(guide.currentStep.introLine).toBeUndefined();
+    expect(guide.currentStep.cards).toBeUndefined();
+    expect(guide.currentStepTargetSelector).toBeUndefined();
+    expect(guide.isCurrentActionCompleted).toBe(true);
+  });
+
   it('shows encouragement only after the required curation action succeeds', () => {
     const { guide, state } = setup(); step(guide, 'result-curation', 'result');
     expect(guide.mascotPose).toBe('inspect');

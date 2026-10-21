@@ -78,5 +78,3 @@
 @media(prefers-reduced-motion:reduce){.workspace-track{scroll-behavior:auto}}
 .figure-workspace{flex:1;min-height:0;overflow:hidden;border-radius:14px;background:var(--color-surface,#fff)}
 .result-workspace[hidden],.figure-workspace[hidden]{display:none!important}
-.figure-workspace.guide-exploration{margin-top:170px}
-@media(max-width:760px){.figure-workspace.guide-exploration{margin-top:220px}}

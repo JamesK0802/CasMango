@@ -44,19 +44,19 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.figure-tour]="currentStep.id === 'result-figure-homeo'" [class.workspace-tour]="guideMode === 'workspace' && !currentStep.isIntro" [class.no-target]="!targetRect" tabindex="-1">
+    <div class="guide-root" [class.results-tour]="guideMode === 'result'" [class.guide-completed]="currentStep.isFinal" [class.figure-tour]="currentStep.id === 'result-figure-homeo'" [class.workspace-tour]="guideMode === 'workspace' && !currentStep.isIntro && !currentStep.isFinal" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
               class="btn-top-prev"
-              *ngIf="currentStepIndex > 0"
+              *ngIf="currentStepIndex > 0 && !currentStep.isFinal"
               (click)="prevStep()"
               title="Previous Step (←)">
         ◀ Previous
       </button>
 
       <!-- ── Top-Right Fixed Exit Guide Button ── -->
-      <button type="button" class="btn-top-exit" (click)="closeGuide()" title="Exit Guide (Esc)">
+      <button type="button" *ngIf="!currentStep.isFinal" class="btn-top-exit" (click)="closeGuide()" title="Exit Guide (Esc)">
         Exit Guide ✕
       </button>
 
@@ -174,7 +174,7 @@ export interface GuideStep {
           <div class="bubble-footer">
             <button type="button"
                     class="btn-hub-return"
-                    *ngIf="guideMode !== 'hub'"
+                    *ngIf="guideMode !== 'hub' && !currentStep.isFinal"
                     (click)="returnToHub()"
                     title="Return to Guide Selection Hub">
               All Guides Hub
@@ -433,6 +433,8 @@ export interface GuideStep {
     .guide-dialog-wrapper.is-large-dialog {
       max-width: 860px;
     }
+    .results-tour .guide-dialog-wrapper,
+    .guide-completed .guide-dialog-wrapper{position:fixed;top:50%!important;left:50%!important;bottom:auto;width:min(800px,calc(100vw - 32px))!important;max-width:calc(100vw - 32px);max-height:calc(100dvh - 100px);margin:0;overflow-y:auto;transform:translate(-50%,-50%);animation:none}
 
     @keyframes dialogPop {
       from { transform: scale(0.97); opacity: 0; }
@@ -879,6 +881,9 @@ export interface GuideStep {
       align-items: center;
       gap: 10px;
     }
+    .guide-completed .bubble-headline{font-size:clamp(28px,4vw,40px);text-align:center;margin:16px 0 32px;line-height:1.2}
+    .guide-completed .bubble-footer{justify-content:center}
+    .guide-completed .final-actions-group{justify-content:center;flex-wrap:wrap}
 
     .btn-secondary-action {
       background: #f1f5f9;
@@ -1194,13 +1199,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     {
       id: 'run-and-view',
       stageName: 'Execution',
-      headline: 'Start Analysis & View Outcomes',
-      textLines: [
-        '• In normal use, Start Local Analysis runs Web Workers with live progress bars. This walkthrough keeps execution locked; use Next: Results Guide to explore the prepared example.',
-        '• Export comprehensive results to Excel (.xlsx) and drop them into Result Viewer anytime, or inspect accuracy in the Benchmark tab.',
-        '• When you exit the guide, the "Guide Analysis" tab will be closed automatically, restoring your original workspace cleanly.'
-      ],
-      targetSelector: '#guide-run-btn',
+      headline: 'Guide Completed',
       isFinal: true
     }
   ];
@@ -1268,8 +1267,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       nextButtonText: 'Finish ▶'
     },
     {
-      id: 'workspace-final', stageName: 'Workspace Complete', headline: 'Load → align → search',
-      textLines: ['Import reads, align them and search by ID or sequence.'],
+      id: 'workspace-final', stageName: 'Workspace Complete', headline: 'Guide Completed',
       isFinal: true
     }
   ];
@@ -1355,15 +1353,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     {
       id: 'benchmark-final',
       stageName: 'Benchmark Complete',
-      headline: 'Benchmark Tour Complete!',
-      introLine: 'You have explored all core modules of CasMANGO! Return to the Guide Hub or start analyzing your CRISPR experiments.',
-      cards: [
-        {
-          badge: 'Ready to Run',
-          title: 'Start Analyzing',
-          desc: 'Load your FASTQ sequencing reads and discover accurate CRISPR outcomes with 100% client-side privacy.'
-        }
-      ],
+      headline: 'Guide Completed',
       isFinal: true
     }
   ];
@@ -1569,20 +1559,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     {
       id: 'result-final-hub',
       stageName: 'Results Complete',
-      headline: 'Results Guide Complete!',
-      introLine: 'You have explored all outcome analytics, annotation tracks, curation options, and Excel reports. What would you like to explore next?',
-      cards: [
-        {
-          badge: 'Next Guide',
-          title: 'Sequence Viewer Guide',
-          desc: 'Load, align and search FASTQ reads.'
-        },
-        {
-          badge: 'Next Guide',
-          title: 'Benchmark Guide',
-          desc: 'Explore labeled dataset validation and Illumina paired-end normalization.'
-        }
-      ],
+      headline: 'Guide Completed',
       isFinal: true
     }
   ];
@@ -1633,6 +1610,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   get currentStepTargetSelector(): string | undefined {
     const step = this.currentStep;
+    if (step.isFinal) return undefined;
     if (step.id === 'workspace-search' && document.querySelector('#guide-workspace-search-help-panel')) return '#guide-workspace-find-region';
     if (step.id === 'result-homeo-open' && document.querySelector('#guide-open-homeo[aria-pressed="true"]')) return '#guide-homeo-result-pane';
     if (step.id === 'result-figure-homeo') {
