@@ -729,12 +729,4 @@
     <strong>Error:</strong> {{ state.error }}
   </div>
 
-  <div class="status-log-container" *ngIf="state.debugLogs.length > 0">
-    <div class="status-log">
-      <div class="log-title">Communication Log:</div>
-      <div class="log-entries">
-        <div *ngFor="let log of state.debugLogs" class="log-entry">{{ log }}</div>
-      </div>
-    </div>
-  </div>
 </div>
