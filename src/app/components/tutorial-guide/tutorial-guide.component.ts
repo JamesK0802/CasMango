@@ -992,7 +992,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private actionRevision = 0;
   private targetObserver?: ResizeObserver;
   private observedTarget?: Element;
-  private placementAnchor?: { key: string; side: GuideSide };
+  private placementAnchor?: { key: string; side: GuideSide; offset: number; dialogHeight: number };
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private savedViewer?: AppStateService['viewerSlot'];
   private savedCuration?: { config: AppStateService['curationConfig']; curated: boolean; original: AppStateService['originalSlotSnapshot']; exported: File | null };
@@ -1981,6 +1981,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
   @HostListener('window:resize')
   onResize() {
+    this.placementAnchor = undefined;
     this.updateLayoutInstant();
   }
 
@@ -2650,12 +2651,10 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       const el = document.querySelector(sel) as HTMLElement;
       if (el) {
         if (this.guideMode !== 'analysis') {
+          this.placementAnchor = undefined;
           if (this.guideMode === 'result') this.revealResultTarget();
+          else el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
           this.updateLayoutInstant();
-          // Reveal the anchored explanation once on entry; subsequent scrolling
-          // only tracks the focus box, never pins the dialog to the viewport.
-          const top = Number.parseFloat(this.cardStyle['top'] || '0');
-          window.scrollTo({ top: Math.max(0, top - 80), behavior: 'smooth' });
           this.later(() => this.updateLayoutInstant(), 320);
           return;
         }
@@ -2798,9 +2797,11 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
 
     if (this.guideMode !== 'analysis') {
       const key = `${this.guideMode}:${this.currentStep.id}:${sel}`;
+      const anchor = this.placementAnchor?.key === key && Math.abs(this.placementAnchor.dialogHeight - dialogHeight) < 1
+        ? this.placementAnchor : undefined;
       const position = anchoredGuidePlacement(rect, dialogHeight, docWidth,
-        this.placementAnchor?.key === key ? this.placementAnchor.side : undefined);
-      this.placementAnchor = { key, side: position.side };
+        anchor?.side, { top: scrollY, height: vh }, anchor?.offset);
+      this.placementAnchor = { key, side: position.side, offset: position.offset, dialogHeight };
       cTop = position.top; cLeft = position.left; cardWidth = position.width;
     }
     // Clamp horizontally to page bounds
