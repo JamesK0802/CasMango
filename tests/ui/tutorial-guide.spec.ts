@@ -5,7 +5,7 @@ import { TutorialGuideComponent } from '../../src/app/components/tutorial-guide/
 
 class Target {
   constructor(private selectors: string[] = []) {}
-  closest(selector: string) { return this.selectors.includes(selector) ? this : null; }
+  closest(selector: string) { return this.selectors.includes(selector) || selector.split(',').some(s => this.selectors.includes(s.trim())) ? this : null; }
   blur = vi.fn();
 }
 
@@ -438,6 +438,10 @@ describe('Results guide entry and readiness', () => {
     expect(guide.isCurrentActionCompleted).toBe(true);
     const e = event(['.figure-workspace', '.panel-item'], 'dragstart'); (guide as any).guardInteraction(e);
     expect(e.preventDefault).not.toHaveBeenCalled();
+    for (const selector of ['.panel-drag-handle', '.preview-slot']) {
+      const drag = event(['.figure-workspace', selector], 'dragover'); (guide as any).guardInteraction(drag);
+      expect(drag.preventDefault).not.toHaveBeenCalled();
+    }
     nodes.set('#guide-figure-btn[aria-pressed="true"]', {});
     expect(guide.currentStepTargetSelector).toBe('#guide-figure-workspace');
     expect(guide.resultSteps.map(s => s.id)).not.toContain('result-figure-both');

@@ -1,9 +1,9 @@
-import { Component, Input, OnChanges, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, ChangeDetectorRef } from '@angular/core';
 import { GeneResult } from '../../models/analysis.model';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, captureFigureSource, moveFigurePanel, renderFigure, figureRows, figureRowChoices } from './result-presentation';
+import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, captureFigureSource, moveFigurePanel, renderFigure, figureRows, figureRowChoices, figurePanelLayout, CoeditingMetric, COEDITING_METRICS } from './result-presentation';
 
 @Component({
   selector: 'app-figure-composer', standalone: true, imports: [CommonModule, FormsModule],
@@ -25,6 +25,7 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
         </div>
       </div>
       <div class="source-line">{{ selectedSource.label || 'Choose a source' }}</div>
+      <select *ngIf="sourceChoice === 'homeo' && (kind === 'coediting' || kind === 'all')" aria-label="Figure co-editing basis" [ngModel]="coeditingMetric" (ngModelChange)="coeditingMetric = $event; coeditingMetricChange.emit($event)"><option *ngFor="let metric of metrics" [value]="metric.value">{{ metric.label }}</option></select>
       <div class="add-row">
         <label class="sr-only" [for]="origin + '-figure-kind'">Panel type</label>
         <select [id]="origin + '-figure-kind'" [(ngModel)]="kind">
@@ -50,7 +51,7 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
       </details>
       <div class="panel-list" *ngIf="panels.length">
         <div class="panel-item" *ngFor="let panel of panels; let i = index" draggable="true"
-          (dragstart)="startDrag($event, i)" (dragover)="$event.preventDefault()" (drop)="dropPanel($event, i)" (dragend)="dragIndex = null">
+          (dragstart)="startDrag($event, i)" (dragover)="$event.preventDefault()" (drop)="dropPanel($event, i)" (dragend)="endDrag()">
           <span class="panel-letter">{{ letter(i) }}</span>
           <label class="sr-only" [for]="origin + '-panel-' + panel.id">Panel title</label>
           <input [id]="origin + '-panel-' + panel.id" [(ngModel)]="panel.title" maxlength="90" (ngModelChange)="refresh()">
@@ -67,7 +68,14 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
       </div>
       <div class="figure-preview-area" [class.mobile-hidden]="mobilePane !== 'preview'">
       <div class="figure-canvas" aria-label="Figure preview">
-        <div class="figure-preview" *ngIf="panels.length; else empty" [style.width]="fitWidth ? '100%' : previewWidth + 'px'" [innerHTML]="preview"></div>
+        <div class="figure-preview" *ngIf="panels.length; else empty" [class.is-dragging]="dragIndex !== null" [style.width]="fitWidth ? '100%' : previewWidth + 'px'">
+          <div [innerHTML]="preview"></div>
+          <div *ngFor="let slot of previewLayout.slots" class="preview-slot" [class.drop-target]="dropIndex === slot.index" [attr.data-panel-slot]="slot.index"
+            [style.left.%]="100 * slot.x / previewLayout.width" [style.top.%]="100 * slot.y / previewLayout.height" [style.width.%]="100 * slot.width / previewLayout.width" [style.height.%]="100 * slot.height / previewLayout.height"
+            (dragover)="$event.preventDefault(); dropIndex = slot.index" (drop)="dropPanel($event, slot.index, true)">
+            <button type="button" class="panel-drag-handle" draggable="true" [attr.aria-label]="'Move panel ' + letter(slot.index)" (dragstart)="startDrag($event, slot.index)" (dragend)="endDrag()" (keydown.arrowleft)="$event.preventDefault(); move(slot.index, slot.index - 1)" (keydown.arrowright)="$event.preventDefault(); move(slot.index, slot.index + 1)">⠿</button>
+          </div>
+        </div>
         <ng-template #empty><div class="figure-empty">Choose a source and add a panel.</div></ng-template>
       </div>
         <div class="preview-tools" aria-label="Preview size">
@@ -88,7 +96,8 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
     button{cursor:pointer;white-space:nowrap}button:disabled{opacity:.4;cursor:default}button.primary{background:#f59e0b;border-color:#f59e0b;color:#1e293b;font-weight:600}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
     details{border-block:1px solid var(--color-border,#e2e8f0);margin:14px 0;padding:10px 0}summary{cursor:pointer;font-size:12px;font-weight:600}label{display:grid;gap:5px;font-size:11px;margin:10px 0}.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}input,select{width:100%;min-width:0}.panel-list{display:grid;gap:7px;margin-bottom:14px}.panel-letter{font-weight:700;width:12px;flex-shrink:0}.panel-item>input{flex:1;min-width:0}.panel-item>button{padding:6px 8px}.panel-item{cursor:grab}
     .preview-tools{position:absolute;bottom:14px;right:14px;z-index:2;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:calc(100% - 28px);padding:9px 12px;background:#ffffffed;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 4px 18px #0f172a14;backdrop-filter:blur(8px)}.preview-tools label{display:flex;align-items:center;gap:8px;margin:0}.preview-tools input{width:90px;padding:0;accent-color:#f59e0b}.preview-tools label span{min-width:35px}.preview-tools button{padding:5px 8px;font-size:11px}.preview-tools button[aria-pressed="true"]{background:#fffbeb;border-color:#e9b34b}
-    .figure-preview{border:1px solid #e2e8f0;background:#fff;max-width:none;flex-shrink:0}.figure-preview ::ng-deep svg{display:block;width:100%;height:auto;min-width:0}.figure-empty{padding:45px 15px;text-align:center;background:var(--color-surface-alt,#f8fafc);border:1px dashed var(--color-border,#dbe1e8);border-radius:9px;font-size:13px;line-height:1.8}
+    .figure-preview{position:relative;border:1px solid #e2e8f0;background:#fff;max-width:none;flex-shrink:0}.figure-preview ::ng-deep svg{display:block;width:100%;height:auto;min-width:0}.figure-empty{padding:45px 15px;text-align:center;background:var(--color-surface-alt,#f8fafc);border:1px dashed var(--color-border,#dbe1e8);border-radius:9px;font-size:13px;line-height:1.8}
+    .preview-slot{position:absolute;pointer-events:none;border:1px solid transparent;border-radius:5px}.panel-drag-handle{position:absolute;top:0;right:0;pointer-events:auto;cursor:grab;padding:2px 7px;color:#94a3b8;background:#fff9;border-color:transparent;font-size:18px;line-height:1.2}.panel-drag-handle:hover,.panel-drag-handle:focus-visible{color:#92400e;background:#fffbeb;border-color:#e9b34b}.is-dragging .preview-slot{pointer-events:auto;border-color:#e2e8f0}.is-dragging .preview-slot.drop-target{background:#f59e0b15;border:2px dashed #f59e0b}
     footer{justify-content:space-between;margin-top:14px;flex-wrap:wrap}.error{color:#b45309;font-size:12px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
   `]
 })
@@ -98,6 +107,9 @@ export class FigureComposerComponent implements OnChanges {
   @Input() genes: GeneResult[] = [];
   @Input() active = false;
   @Input() previewOnly = false;
+  @Input() coeditingMetric: CoeditingMetric = 'edited';
+  @Output() coeditingMetricChange = new EventEmitter<CoeditingMetric>();
+  metrics = COEDITING_METRICS;
   exportPreviewMessage = '';
   mobilePane: 'setup' | 'preview' = 'setup';
   previewZoom = 100;
@@ -124,8 +136,10 @@ export class FigureComposerComponent implements OnChanges {
     this.selectedRefs = this.selectedRefs.includes(name) ? this.selectedRefs.filter(n => n !== name) : [...this.selectedRefs, name];
     this.chooseSource();
   }
-  get autoRows() { return figureRows(this.panels.length,{columns:0}).join('+'); }
-  get rowChoices() { return figureRowChoices(this.panels.length); }
+  get panelCells() { return this.panels.reduce((sum, panel) => sum + (panel.kind === 'alleles' ? 2 : 1), 0); }
+  get autoRows() { return this.panels.some(panel => panel.kind === 'alleles') ? '' : figureRows(this.panels.length,{columns:0}).join('+'); }
+  get rowChoices() { return figureRowChoices(this.panelCells); }
+  previewLayout = figurePanelLayout([], {title:'', columns:0, fontSize:14, radius:30, groupLimit:5, minFrequency:2, palette:'okabe'});
   private get requestedKinds(): FigureKind[] { return this.kind === 'all' ? ['profile','editing','alleles','summary', ...(this.sourceChoice === 'homeo' ? ['coediting' as const] : [])] : [this.kind]; }
   get canAddPanels() { return this.selectedSource.rows.length > 0 && this.panels.length + this.requestedKinds.length <= 12 && (!this.requestedKinds.includes('coediting') || this.selectedSource.rows.length >= 2); }
   panels: FigurePanel[] = [];
@@ -136,6 +150,7 @@ export class FigureComposerComponent implements OnChanges {
   exporting = false;
   error = '';
   dragIndex: number | null = null;
+  dropIndex: number | null = null;
   private nextId = 0;
   constructor(private sanitizer: DomSanitizer, private cdr: ChangeDetectorRef) {}
   ngOnChanges() {
@@ -152,7 +167,7 @@ export class FigureComposerComponent implements OnChanges {
     if (!this.canAddPanels) return;
     const titles = { profile: 'Mutation profile', editing: 'Non-WT reads', alleles: 'Cut-site sequences', summary: 'Read summary', coediting: 'Co-editing model' };
     const source = this.selectedSource;
-    this.panels = [...this.panels, ...this.requestedKinds.map(kind => ({ id: ++this.nextId, kind, title: titles[kind], source: captureFigureSource(source.label, source.rows) }))];
+    this.panels = [...this.panels, ...this.requestedKinds.map(kind => ({ id: ++this.nextId, kind, title: titles[kind], source: captureFigureSource(source.label, source.rows), ...(kind === 'coediting' ? { coeditingMetric: this.coeditingMetric } : {}) }))];
     this.refresh();
   }
   refresh() {
@@ -162,13 +177,22 @@ export class FigureComposerComponent implements OnChanges {
       const value = Number(this.options[key]); this.options[key] = Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
     }
     this.svg = renderFigure(this.panels, this.options);
+    this.previewLayout = figurePanelLayout(this.panels, this.options);
     // Only our escaped, locally generated SVG is trusted; raw user markup is never accepted.
     this.preview = this.sanitizer.bypassSecurityTrustHtml(this.svg);
   }
   move(from: number, to: number) { this.panels = moveFigurePanel(this.panels, from, to); this.refresh(); }
   remove(index: number) { this.panels = this.panels.filter((_, i) => i !== index); this.refresh(); }
   startDrag(event: DragEvent, index: number) { this.dragIndex = index; event.dataTransfer?.setData('text/plain', String(index)); }
-  dropPanel(event: DragEvent, index: number) { event.preventDefault(); if (this.dragIndex !== null) this.move(this.dragIndex, index); this.dragIndex = null; }
+  endDrag() { this.dragIndex = null; this.dropIndex = null; }
+  dropPanel(event: DragEvent, index: number, swap = false) {
+    event.preventDefault(); event.stopPropagation();
+    if (this.dragIndex !== null) {
+      if (swap) { const panels = [...this.panels]; [panels[this.dragIndex], panels[index]] = [panels[index], panels[this.dragIndex]]; this.panels = panels; this.refresh(); }
+      else this.move(this.dragIndex, index);
+    }
+    this.endDrag();
+  }
   private save(blob: Blob, extension: string) {
     const url = URL.createObjectURL(blob), link = document.createElement('a');
     link.href = url; link.download = `CasMANGO-${this.origin}-figure.${extension}`; link.click();

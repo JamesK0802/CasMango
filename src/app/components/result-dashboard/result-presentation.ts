@@ -61,7 +61,16 @@ export interface FigureSource { label: string; rows: ComparisonRow[]; }
  * with independence between loci. Bulk amplicons cannot establish either premise.
  * Missing loci invalidate the whole selected combination; never drop them silently.
  */
-export function homeologCombination(rows: ComparisonRow[], metric: 'edited' | 'indel' | 'outOfFrame' = 'edited') {
+export type CoeditingMetric = 'edited' | 'indel' | 'outOfFrame';
+export const COEDITING_METRICS: { value: CoeditingMetric; label: string }[] = [
+  { value: 'outOfFrame', label: 'OOF only' },
+  { value: 'indel', label: 'OOF + IF' },
+  { value: 'edited', label: 'Non-WT' }
+];
+export function coeditingMetricLabel(metric: CoeditingMetric = 'edited'): string {
+  return COEDITING_METRICS.find(item => item.value === metric)!.label;
+}
+export function homeologCombination(rows: ComparisonRow[], metric: CoeditingMetric = 'edited') {
   const values = rows.map(row => ({ name: row.name, rate: row.edited === null ? null :
     metric === 'indel' ? (row.inFrame ?? 0) + (row.outOfFrame ?? 0) : row[metric] }));
   if (values.length < 2 || values.some(value => value.rate === null)) return null;
@@ -79,7 +88,7 @@ export function homeologCombination(rows: ComparisonRow[], metric: 'edited' | 'i
     distribution: distribution.map((p, count) => ({ count, percent: p * 100 })) };
 }
 export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary' | 'coediting';
-export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; }
+export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; coeditingMetric?: CoeditingMetric; }
 export interface FigureOptions { title: string; columns: number; layout?: string; fontSize: number; radius: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }
 
 export function figureRows(count: number, options: Pick<FigureOptions, 'columns' | 'layout'>): number[] {
@@ -145,38 +154,68 @@ export function sequenceCells(target: TargetResult, groupIndex: number, radius: 
   return cells;
 }
 
+export interface FigureSlot { index: number; row: number; col: number; span: number; x: number; y: number; width: number; height: number; }
+export function figurePanelLayout(panels: FigurePanel[], options: FigureOptions): { width: number; height: number; slots: FigureSlot[] } {
+  const gap = 24, margin = 28;
+  const panelHeight = (panel: FigurePanel) => panel.kind === 'coediting' ? 156 + (panel.source.rows.length + 1) * 34 : panel.kind === 'alleles'
+    ? 90 + panel.source.rows.reduce((height, row) => height + 56 + Math.min(options.groupLimit, (row.target?.top_groups ?? []).filter(g => g.read_pct >= options.minFrequency).length) * 30, 0)
+    : 112 + panel.source.rows.length * (panel.kind === 'summary' ? 38 : 56);
+  const rows = figureRows(panels.length, options);
+  const fixed = options.layout?.startsWith('columns:') ? Number(options.layout.slice(8)) : !options.layout ? options.columns : 0;
+  const fixedColumns = fixed >= 1 && fixed <= 4 ? fixed : 0;
+  if (!panels.some(panel => panel.kind === 'alleles')) {
+    const width = Math.max(...rows, fixedColumns || 1) > 1 ? 1440 : 780;
+    const slots: FigureSlot[] = []; let index = 0, y = 108;
+    for (const [row, count] of rows.entries()) {
+      const height = Math.max(...panels.slice(index, index + count).map(panelHeight));
+      const columns = fixedColumns || count, panelWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
+      for (let col = 0; col < count; col++) slots.push({ index: index++, row, col, span: 1, x: margin + col * (panelWidth + gap), y, width: panelWidth, height });
+      y += height + gap;
+    }
+    return { width, height: y + 28 - (slots.length ? gap : 0), slots };
+  }
+  const cells = panels.reduce((sum, panel) => sum + (panel.kind === 'alleles' ? 2 : 1), 0);
+  const requested = options.layout?.startsWith('rows:') ? options.layout.slice(5).split('+').map(Number) : [];
+  const rowPattern = requested.every(n => Number.isInteger(n) && n >= 1 && n <= 4) && requested.reduce((a,b) => a+b,0) === cells ? requested : [];
+  const columns = fixedColumns || (rowPattern.length ? Math.max(...rowPattern) : Math.min(panels.length, cells > 12 ? 4 : Math.max(...figureRows(cells, { columns: 0, layout: 'auto' }))));
+  const width = columns > 1 ? 1440 : 780, panelWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
+  const cellHeight = Math.max(180, ...panels.map(panel => panel.kind === 'alleles' ? (panelHeight(panel) - gap) / 2 : panelHeight(panel)));
+  const occupied = new Set<string>(), slots: FigureSlot[] = [];
+  const capacity = (row: number) => rowPattern[row] ?? columns;
+  panels.forEach((panel, index) => {
+    const span = panel.kind === 'alleles' ? 2 : 1;
+    for (let row = 0; ; row++) {
+      let placed = false;
+      for (let col = 0; col < columns; col++) {
+        if (Array.from({length:span}, (_,i) => row+i).some(r => col >= capacity(r) || occupied.has(`${r}:${col}`))) continue;
+        for (let i = 0; i < span; i++) occupied.add(`${row+i}:${col}`);
+        slots.push({ index, row, col, span, x: margin + col * (panelWidth + gap), y: 108 + row * (cellHeight + gap), width: panelWidth, height: span * cellHeight + (span - 1) * gap });
+        placed = true; break;
+      }
+      if (placed) break;
+    }
+  });
+  const rowCount = Math.max(...slots.map(slot => slot.row + slot.span));
+  return { width, height: 136 + rowCount * cellHeight + Math.max(0, rowCount - 1) * gap, slots };
+}
+
 /** Standalone SVG (no DOM screenshots, HTML, external fonts, or scripts). */
 export function renderFigure(panels: FigurePanel[], input: FigureOptions): string {
   const options = { ...input,
     fontSize: Math.max(10, Math.min(22, input.fontSize)), radius: Math.max(10, Math.min(60, input.radius)),
     groupLimit: Math.max(1, Math.min(12, input.groupLimit)), minFrequency: pct(input.minFrequency) };
   const colors = FIGURE_COLORS[options.palette] ?? FIGURE_COLORS.okabe;
-  const rows = figureRows(panels.length, options);
-  const fixedColumns = options.layout?.startsWith('columns:') ? Number(options.layout.slice(8)) : !options.layout ? options.columns : 0;
-  const width = Math.max(...rows, fixedColumns || 1) > 1 ? 1440 : 780, gap = 24, margin = 28;
+  const layout = figurePanelLayout(panels, options);
+  const width = layout.width, margin = 28;
   const font = options.fontSize;
   const text = (x: number, y: number, content: unknown, size = font, extra = '') => `<text x="${x}" y="${y}" font-size="${size}" ${extra}>${escapeSvg(content)}</text>`;
   const legend = colors.map((color, i) => `<rect x="${margin + i * 155}" y="65" width="11" height="11" fill="${color}"/>${text(margin + 17 + i * 155, 75, ['WT', 'Substitution', 'In-frame indel', 'Out-of-frame indel'][i], 12)}`).join('');
-  const panelHeight = (panel: FigurePanel) => panel.kind === 'coediting' ? 156 + (panel.source.rows.length + 1) * 34 : panel.kind === 'alleles'
-    ? 90 + panel.source.rows.reduce((height, row) => height + 56 + Math.min(options.groupLimit, (row.target?.top_groups ?? []).filter(g => g.read_pct >= options.minFrequency).length) * 30, 0)
-    : 112 + panel.source.rows.length * (panel.kind === 'summary' ? 38 : 56);
-  const heights: number[] = [];
-  const positions: {row:number;col:number;columns:number}[] = [];
-  let panelIndex = 0;
-  rows.forEach((columns,row) => {
-    for(let col=0;col<columns;col++) {
-      positions.push({row,col,columns:fixedColumns >= 1 && fixedColumns <= 4 ? fixedColumns : columns});
-      heights[row] = Math.max(heights[row] || 0, panelHeight(panels[panelIndex++]));
-    }
-  });
-  let body = ''; let y = 108;
+  let body = '';
   panels.forEach((panel, index) => {
-    const {row,col,columns} = positions[index];
-    const panelWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
+    const {row,col,x,y,width:panelWidth,span} = layout.slots[index];
     const font = Math.max(10, Math.min(options.fontSize, panelWidth / 30));
-    if (col === 0 && index > 0) y += heights[row - 1] + gap;
-    const x = margin + col * (panelWidth + gap), inner = panelWidth - 40;
-    body += `<g data-figure-panel="${index}" data-row="${row}" data-column="${col}" transform="translate(${x},${y})">`;
+    const inner = panelWidth - 40;
+    body += `<g data-figure-panel="${index}" data-row="${row}" data-column="${col}" data-row-span="${span}" transform="translate(${x},${y})">`;
     body += text(0, 22, `${String.fromCharCode(97 + index)}  ${short(panel.title, Math.floor(panelWidth / ((font + 3) * .65)) - 4)}`, font + 3, 'font-weight="700"');
     body += text(0, 44, short(panel.source.label, Math.floor(panelWidth / 7)), 11, 'fill="#64748b"');
     if (panel.kind === 'profile' || panel.kind === 'editing') {
@@ -198,8 +237,8 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
       }
       body += text(112, 85 + panel.source.rows.length * 56, panel.kind === 'editing' ? 'Non-WT reads (%) · indels + substitutions' : 'Read composition (%) · label = WT', 11, 'fill="#64748b"');
     } else if (panel.kind === 'coediting') {
-      body += text(0, 66, 'Non-WT · independence assumed', 11, 'fill="#64748b"');
-      const model = homeologCombination(panel.source.rows);
+      body += text(0, 66, coeditingMetricLabel(panel.coeditingMetric) + ' · independence assumed', 11, 'fill="#64748b"');
+      const model = homeologCombination(panel.source.rows, panel.coeditingMetric);
       if (!model) body += text(0, 94, 'Select at least two references with aligned reads.', 12);
       else {
         body += text(0, 90, `All ${panel.source.rows.length}: ${fmt(model.all)}     At least one: ${fmt(model.any)}`, font);
@@ -253,6 +292,6 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
     }
     body += '</g>';
   });
-  const height = 136 + heights.reduce((sum, value) => sum + value, 0) + Math.max(0, heights.length - 1) * gap;
+  const height = layout.height;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeSvg(options.title)}"><rect width="100%" height="100%" fill="white"/><g font-family="Arial, sans-serif" fill="#1e293b">${text(margin, 38, options.title, font + 8, 'font-weight="700"')}${legend}${body}</g></svg>`;
 }

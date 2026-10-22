@@ -7,7 +7,7 @@ import { Chart } from 'chart.js/auto';
 
 import { FigureComposerComponent } from './figure-composer.component';
 import { HomoeologComparisonComponent } from './homoeolog-comparison.component';
-import { comparisonRows, FigureSource, withoutExcludedGroups } from './result-presentation';
+import { comparisonRows, FigureSource, withoutExcludedGroups, CoeditingMetric } from './result-presentation';
 import { GeneResult, MutationGroup } from '../../models/analysis.model';
 import { resolveAnnotationCutSite } from './annotation-cut-site';
 import { groupKey } from '../../models/curation.model';
@@ -28,6 +28,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   homoeologOpen = false;
   figureOpen = false;
   figureInitialSource: FigureSource = { label: '', rows: [] };
+  coeditingMetric: CoeditingMetric = 'edited';
   activeWorkspacePane = 'standard';
   @ViewChild('workspaceTrack') workspaceTrack?: ElementRef<HTMLElement>;
   @ViewChild(HomoeologComparisonComponent) comparison?: HomoeologComparisonComponent;
@@ -65,6 +66,7 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   }
   get homoeologFigureSource(): FigureSource { return this.comparison?.figureSource ?? { label: '', rows: [] }; }
   toggleHomoeolog(): void {
+    if (this.figureOpen) return;
     this.homoeologOpen = !this.showHomoeolog;
     this.cdr.detectChanges(); this.focusWorkspace(this.homoeologOpen ? 'homoeolog' : 'standard');
   }

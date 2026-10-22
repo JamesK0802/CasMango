@@ -1808,7 +1808,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     }
     const permitted = (!['contextmenu', 'dblclick', 'dragstart', 'dragover', 'drop'].includes(event.type)
       || (this.currentStep.id === 'result-edit-curation' && event.type === 'contextmenu' && !!target.closest('.exclude-btn-group'))
-      || (this.isOptionalExploration && ['dragstart', 'dragover', 'drop'].includes(event.type) && !!target.closest('.panel-item')))
+      || (this.isOptionalExploration && ['dragstart', 'dragover', 'drop'].includes(event.type) && !!target.closest('.panel-item, .panel-drag-handle, .preview-slot')))
       && this.allowedSelectors().some(selector => target.closest(selector));
     if (!permitted) {
       event.preventDefault(); event.stopImmediatePropagation();

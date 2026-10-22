@@ -1271,7 +1271,9 @@ export class AppStateService {
   }
 
   private fastqExportSources(): Array<File | IlluminaFilePair> {
-    const sources: Array<File | IlluminaFilePair> = this.lastRunParams?.sequencingPlatform === 'illumina'
+    if (this.activeMode === 'viewer') return [];
+    const platform = this.lastRunParams?.sequencingPlatform ?? (this.lastRunParams?.dataType === 'paired-end' ? 'illumina' : 'nanopore');
+    const sources: Array<File | IlluminaFilePair> = platform === 'illumina'
       ? this.illuminaPairs.filter(pair => pair.r1 || pair.r2)
       : this.selectedFiles;
     if (this.selectedScopeIndex === -1) return sources;

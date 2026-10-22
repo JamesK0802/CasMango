@@ -1,6 +1,6 @@
 import '@angular/compiler';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { comparisonRows, comparisonSummary, homeologCombination, captureFigureSource, renderFigure, sequenceCells, moveFigurePanel, FigureOptions, withoutExcludedGroups, figureRows, figureRowChoices } from '../../src/app/components/result-dashboard/result-presentation';
+import { comparisonRows, comparisonSummary, homeologCombination, captureFigureSource, renderFigure, sequenceCells, moveFigurePanel, FigureOptions, withoutExcludedGroups, figureRows, figureRowChoices, figurePanelLayout, FigurePanel } from '../../src/app/components/result-dashboard/result-presentation';
 import { groupKey } from '../../src/app/models/curation.model';
 import { HomoeologComparisonComponent } from '../../src/app/components/result-dashboard/homoeolog-comparison.component';
 import { FigureComposerComponent } from '../../src/app/components/result-dashboard/figure-composer.component';
@@ -58,6 +58,17 @@ describe('presentation-only homoeolog comparison', () => {
     expect(combo.distribution.map(d => d.percent)).toEqual([40, 50, 10]);
     expect(rows).toEqual(original);
     expect(homeologCombination(rows, 'indel')!.all).toBeCloseTo(6.75);
+    expect(homeologCombination(rows, 'outOfFrame')!.all).toBeCloseTo(1.75);
+  });
+  it('switches the displayed co-editing basis without changing the read results', () => {
+    const component = new HomoeologComparisonComponent(); component.genes = [gene('7A'), gene('7D',80)];
+    const original = structuredClone(component.genes);
+    expect(component.combination!.all).toBeCloseTo(10);
+    component.coeditingMetric = 'outOfFrame';
+    expect(component.metricLabel).toBe('OOF only'); expect(component.combination!.all).toBeCloseTo(1.75);
+    component.coeditingMetric = 'indel';
+    expect(component.metricLabel).toBe('OOF + IF'); expect(component.combination!.all).toBeCloseTo(6.75);
+    expect(component.genes).toEqual(original);
   });
   it('does not silently ignore missing targets, zero depth or a single selection', () => {
     expect(homeologCombination(comparisonRows([gene('A'),gene('B',50,0)], ['A','B'], 't1'))).toBeNull();
@@ -81,6 +92,16 @@ describe('presentation-only homoeolog comparison', () => {
 });
 
 describe('figure snapshots and publication SVG', () => {
+  it('captures each co-editing panel basis and renders the matching calculation', () => {
+    const composer = new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v} as any, {detectChanges:vi.fn()} as any);
+    composer.source = source(); composer.kind = 'coediting'; composer.coeditingMetric = 'outOfFrame'; composer.addPanel();
+    expect(composer.panels[0].coeditingMetric).toBe('outOfFrame');
+    expect(composer.svg).toContain('OOF only'); expect(composer.svg).toContain(`All 2: ${homeologCombination(source().rows, 'outOfFrame')!.all.toFixed(1)}%`);
+    composer.coeditingMetric = 'indel'; composer.addPanel();
+    expect(composer.panels[0].coeditingMetric).toBe('outOfFrame');
+    expect(composer.panels[1].coeditingMetric).toBe('indel');
+    expect(composer.svg).toContain('OOF + IF'); expect(composer.svg).toContain('All 2: 6.8%');
+  });
   it('renders a selected-combination co-editing model with explicit assumptions', () => {
     const svg = renderFigure([{id:1,kind:'coediting',title:'Co-editing model',source:source()}],options);
     expect(svg).toContain('All 2: 10.0%'); expect(svg).toContain('At least one: 60.0%');
@@ -195,6 +216,26 @@ describe('figure source selection and initial panels', () => {
 });
 
 describe('automatic and custom Figure rows', () => {
+  it('reserves two vertical cells for sequences and fills the cells next to them', () => {
+    const panels: FigurePanel[] = ['profile','editing','alleles','summary','coediting'].map((kind,i)=>({id:i,kind:kind as any,title:kind,source:source()}));
+    const grid = figurePanelLayout(panels, {...options,columns:0,layout:'auto'});
+    expect(grid.slots.map(slot=>[slot.row,slot.col,slot.span])).toEqual([[0,0,1],[0,1,1],[0,2,2],[1,0,1],[1,1,1]]);
+    expect(grid.slots[2].height).toBe(grid.slots[0].height * 2 + 24);
+    for (let a=0;a<grid.slots.length;a++) for(let b=a+1;b<grid.slots.length;b++) {
+      const x=grid.slots[a],y=grid.slots[b];
+      expect(x.x+x.width<=y.x || y.x+y.width<=x.x || x.y+x.height<=y.y || y.y+y.height<=x.y).toBe(true);
+    }
+    expect(renderFigure(panels,{...options,columns:0,layout:'auto'})).toContain('data-row-span="2"');
+  });
+  it('reflows two-cell sequences after drag/drop and preserves their co-editing basis', () => {
+    const composer = new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v} as any,{detectChanges:vi.fn()} as any);
+    composer.source=source();composer.genes=[gene('7A'),gene('7D')];composer.active=true;composer.ngOnChanges();composer.kind='all';composer.coeditingMetric='outOfFrame';composer.addPanel();
+    composer.startDrag({dataTransfer:{setData:vi.fn()}} as any,2);
+    composer.dropPanel({preventDefault:vi.fn(),stopPropagation:vi.fn()} as any,0,true);
+    expect(composer.panels[0].kind).toBe('alleles'); expect(composer.previewLayout.slots[0].span).toBe(2);
+    expect(composer.panels[2].kind).toBe('profile');
+    expect(composer.dragIndex).toBeNull(); expect(composer.panels.find(p=>p.kind==='coediting')!.coeditingMetric).toBe('outOfFrame');
+  });
   it.each([[4,[2,2]],[5,[3,2]],[6,[3,3]],[7,[4,3]],[8,[4,4]],[9,[3,3,3]],[10,[4,3,3]],[11,[4,4,3]],[12,[4,4,4]]] as const)('balances %s panels without singleton rows', (count,expected) => {
     expect(figureRows(count,{columns:0,layout:'auto'})).toEqual(expected);
     const panels = Array.from({length:count},(_,i)=>({id:i,kind:'profile' as const,title:'Panel',source:source()}));
@@ -226,6 +267,13 @@ describe('two-visible-pane workspace', () => {
     const {dashboard} = setup(); dashboard.toggleFigure();
     expect(dashboard.showFigure).toBe(true); expect(dashboard.workspacePanes).toEqual(['standard']);
     expect(dashboard.figureInitialSource.rows[0].name).toBe('A');
+  });
+  it('keeps hidden Homeolog toggles from affecting an open Figure', () => {
+    const {dashboard,track} = setup(); dashboard.toggleFigure(); track.scrollTo.mockClear();
+    const initial = dashboard.figureInitialSource;
+    dashboard.toggleHomoeolog();
+    expect(dashboard.homoeologOpen).toBe(false); expect(dashboard.figureOpen).toBe(true);
+    expect(dashboard.figureInitialSource).toBe(initial); expect(track.scrollTo).not.toHaveBeenCalled();
   });
   it('makes Homeolog comparison available only for Homeolog-mode results', () => {
     const {dashboard} = setup();

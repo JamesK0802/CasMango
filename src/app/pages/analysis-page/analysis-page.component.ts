@@ -1289,6 +1289,7 @@ export class AnalysisPageComponent implements OnInit, OnDestroy {
       : Number(rawValue.interestRegion ?? 90);
 
     this.state.lastRunParams = {
+      sequencingPlatform: platform,
       windowSize,
       phredThreshold: phredVal,
       indelThreshold: indelVal,
