@@ -57,9 +57,6 @@ type MobileWorkspacePanel = 'files' | 'viewer' | 'details';
       background: var(--color-background);
       overflow: hidden;
     }
-    :host-context(body.casmango-workspace-guide) .sequence-workspace-page {
-      height: calc(100dvh - 270px);
-    }
     .mobile-workspace-tabs { display: none; }
     .workspace-container {
       display: flex;

@@ -139,9 +139,9 @@ describe('guided interaction boundaries', () => {
   it('includes the search explanation in the spotlight while help is open', () => {
     const { guide, nodes } = setup(); guide.guideMode = 'workspace';
     guide.currentStepIndex = guide.workspaceSteps.findIndex(s => s.id === 'workspace-search');
-    expect(guide.currentStepTargetSelector).toBe('#guide-workspace-search');
+    expect(guide.currentStepTargetSelector).toBe('#guide-workspace-reads');
     nodes.set('#guide-workspace-search-help-panel', {});
-    expect(guide.currentStepTargetSelector).toBe('#guide-workspace-find-region');
+    expect(guide.currentStepTargetSelector).toBe('#guide-workspace-reads');
   });
 
   it('allows only generated blob download links outside the highlighted action', () => {

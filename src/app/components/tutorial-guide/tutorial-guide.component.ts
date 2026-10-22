@@ -10,6 +10,8 @@ import { GUIDE_MASCOT_ASSETS, guideMascotPose, GuideMascotPose } from './guide-m
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
 import { parseFastqFile } from '../../utils/parsers.utils';
 import { workspaceExampleFile, workspaceExampleItems } from './module-examples';
+import { anchoredGuidePlacement, GuideSide } from './guide-placement';
+import { ILLUMINA_OVERLAP_RULE } from '../../models/illumina-overlap-policy';
 
 export interface AdvantageCard {
   title: string;
@@ -44,7 +46,7 @@ export interface GuideStep {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="guide-root" [class.results-tour]="guideMode === 'result'" [class.guide-completed]="currentStep.isFinal" [class.figure-tour]="currentStep.id === 'result-figure-homeo'" [class.workspace-tour]="guideMode === 'workspace' && !currentStep.isIntro && !currentStep.isFinal" [class.no-target]="!targetRect" tabindex="-1">
+    <div class="guide-root" [class.anchored-tour]="guideMode !== 'analysis'" [class.guide-completed]="currentStep.isFinal" [class.figure-tour]="currentStep.id === 'result-figure-homeo'" [class.workspace-tour]="guideMode === 'workspace' && !currentStep.isIntro && !currentStep.isFinal" [class.no-target]="!targetRect" tabindex="-1">
 
       <!-- ── Top-Left Fixed Previous Button ── -->
       <button type="button"
@@ -391,12 +393,9 @@ export interface GuideStep {
       animation: dialogPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .workspace-tour .guide-dialog-wrapper,
-    .workspace-tour .guide-dialog-wrapper.is-centered {
-      position: fixed; top: auto !important; bottom: 12px; left: 50% !important;
-      width: min(1100px, calc(100vw - 48px)) !important; max-width: calc(100vw - 48px); margin: 0; gap: 12px;
-      transform: translateX(-50%); animation: none;
-      max-height: 188px; overflow-y: auto;
+    .anchored-tour .guide-dialog-wrapper:not(.is-centered) {
+      position: absolute; margin: 0; transform: none; animation: none;
+      max-width: calc(100vw - 32px); max-height: calc(100dvh - 100px); overflow-y: auto;
     }
     .workspace-tour .mascot-col { width: 64px; min-width: 64px; flex: 0 0 64px; }
     .workspace-tour .mascot-tag { max-width: 64px; box-sizing: border-box; font-size: 8px; padding: 3px 5px; }
@@ -433,7 +432,6 @@ export interface GuideStep {
     .guide-dialog-wrapper.is-large-dialog {
       max-width: 860px;
     }
-    .results-tour .guide-dialog-wrapper,
     .guide-completed .guide-dialog-wrapper{position:fixed;top:50%!important;left:50%!important;bottom:auto;width:min(800px,calc(100vw - 32px))!important;max-width:calc(100vw - 32px);max-height:calc(100dvh - 100px);margin:0;overflow-y:auto;transform:translate(-50%,-50%);animation:none}
 
     @keyframes dialogPop {
@@ -881,9 +879,21 @@ export interface GuideStep {
       align-items: center;
       gap: 10px;
     }
-    .guide-completed .bubble-headline{font-size:clamp(28px,4vw,40px);text-align:center;margin:16px 0 32px;line-height:1.2}
-    .guide-completed .bubble-footer{justify-content:center}
-    .guide-completed .final-actions-group{justify-content:center;flex-wrap:wrap}
+    .guide-completed .guide-dialog-wrapper {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+      width: min(520px, calc(100vw - 32px)) !important; box-sizing: border-box;
+      padding: 32px 28px; background: #fff; border: 1px solid #e2e8f0; border-radius: 24px;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, .22);
+    }
+    .guide-completed .mascot-col { width: auto; min-width: 0; margin: 0; }
+    .guide-completed .mascot-avatar-frame { width: 80px; height: 96px; }
+    .guide-completed .mascot-tag { display: none; }
+    .guide-completed .bubble-content { width: 100%; box-sizing: border-box; padding: 0; background: transparent; border: 0; box-shadow: none; }
+    .guide-completed .bubble-headline { font-size: clamp(26px, 4vw, 32px); text-align: center; margin: 20px 0 28px; line-height: 1.2; letter-spacing: -.03em; }
+    .guide-completed .bubble-footer { justify-content: center; margin: 0; padding: 0; border: 0; }
+    .guide-completed .final-actions-group { width: 100%; justify-content: center; flex-wrap: wrap; gap: 10px; }
+    .guide-completed .btn-guide-next { padding: 11px 16px; font-size: 13px; box-shadow: none; }
+    .guide-completed .btn-secondary-action { padding: 11px 16px; font-size: 13px; background: #fff; }
 
     .btn-secondary-action {
       background: #f1f5f9;
@@ -982,6 +992,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   private actionRevision = 0;
   private targetObserver?: ResizeObserver;
   private observedTarget?: Element;
+  private placementAnchor?: { key: string; side: GuideSide };
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private savedViewer?: AppStateService['viewerSlot'];
   private savedCuration?: { config: AppStateService['curationConfig']; curated: boolean; original: AppStateService['originalSlotSnapshot']; exported: File | null };
@@ -1328,7 +1339,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     },
     {
       id: 'benchmark-normalization-mode', stageName: 'Illumina Normalization', headline: 'Switch to the normalization bench',
-      textLines: ['The second benchmark utility inspects paired-end read preparation independently of reference assignment.'],
+      textLines: ['Uses the same paired-end normalization as the main analysis.', ILLUMINA_OVERLAP_RULE + '.'],
       targetSelector: '#guide-bench-normalization-btn', interactiveAction: 'bench_normalization',
       actionPromptText: 'Click Illumina Normalization', actionSuccessText: 'Normalization bench opened.', nextButtonText: 'Next: Load Example Mates ▶'
     },
@@ -1605,7 +1616,7 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
   get currentStepTargetSelector(): string | undefined {
     const step = this.currentStep;
     if (step.isFinal) return undefined;
-    if (step.id === 'workspace-search' && document.querySelector('#guide-workspace-search-help-panel')) return '#guide-workspace-find-region';
+    if (step.id === 'workspace-search') return '#guide-workspace-reads';
     if (step.id === 'result-homeo-open' && document.querySelector('#guide-open-homeo[aria-pressed="true"]')) return '#guide-homeo-result-pane';
     if (step.id === 'result-figure-homeo') {
       return document.querySelector('#guide-figure-btn[aria-pressed="true"]') ? '#guide-figure-workspace' : '#guide-figure-btn';
@@ -2638,9 +2649,13 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
     if (sel) {
       const el = document.querySelector(sel) as HTMLElement;
       if (el) {
-        if (this.guideMode === 'result') {
-          this.revealResultTarget();
+        if (this.guideMode !== 'analysis') {
+          if (this.guideMode === 'result') this.revealResultTarget();
           this.updateLayoutInstant();
+          // Reveal the anchored explanation once on entry; subsequent scrolling
+          // only tracks the focus box, never pins the dialog to the viewport.
+          const top = Number.parseFloat(this.cardStyle['top'] || '0');
+          window.scrollTo({ top: Math.max(0, top - 80), behavior: 'smooth' });
           this.later(() => this.updateLayoutInstant(), 320);
           return;
         }
@@ -2781,25 +2796,12 @@ export class TutorialGuideComponent implements OnInit, OnDestroy {
       }
     }
 
-    if (this.guideMode === 'result') {
-      // Bubble follows nested card scrolling and stays immediately beside the focus.
-      const topRoom = visibleTop - 72, bottomRoom = vh - visibleBottom - 12;
-      cTop = topRoom >= dialogHeight + 12
-        ? visibleTop + scrollY - dialogHeight - 12
-        : bottomRoom >= dialogHeight + 12 ? visibleBottom + scrollY + 12
-        : scrollY + Math.max(72, Math.min(vh - dialogHeight - 12, visibleTop - dialogHeight - 12));
-      sY = topRoom >= dialogHeight + 12 ? rect.top : rect.bottom;
-      eY = topRoom >= dialogHeight + 12 ? cTop + dialogHeight : cTop;
-    }
-
-    if (this.isOptionalExploration && el.matches('.workspace-pane')) {
-      const leftRoom = clientRect.left - 32;
-      const rightRoom = docWidth - clientRect.right - 32;
-      if (Math.max(leftRoom, rightRoom) >= 300) {
-        cardWidth = Math.min(640, Math.max(leftRoom, rightRoom));
-        cLeft = leftRoom >= rightRoom ? 16 : clientRect.right + 16;
-        cTop = scrollY + Math.max(72, Math.min(vh - dialogHeight - 16, clientRect.top + 24));
-      }
+    if (this.guideMode !== 'analysis') {
+      const key = `${this.guideMode}:${this.currentStep.id}:${sel}`;
+      const position = anchoredGuidePlacement(rect, dialogHeight, docWidth,
+        this.placementAnchor?.key === key ? this.placementAnchor.side : undefined);
+      this.placementAnchor = { key, side: position.side };
+      cTop = position.top; cLeft = position.left; cardWidth = position.width;
     }
     // Clamp horizontally to page bounds
     cLeft = Math.max(16, Math.min(docWidth - cardWidth - 16, cLeft));

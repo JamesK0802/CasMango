@@ -9,6 +9,17 @@ import {
   scoreReadAgainstWindow,
 } from './classifier';
 import { GenePayload } from './multi-reference-assigner';
+import {
+  DEFAULT_ILLUMINA_MIN_OVERLAP_BASES,
+  DEFAULT_ILLUMINA_MIN_OVERLAP_IDENTITY,
+  DEFAULT_ILLUMINA_MAX_OVERLAP_DIFFERENCES,
+  DEFAULT_ILLUMINA_OVERLAP_CHECK_BASES,
+} from '../../models/illumina-overlap-policy';
+export {
+  DEFAULT_ILLUMINA_MIN_OVERLAP_BASES,
+  DEFAULT_ILLUMINA_MIN_OVERLAP_IDENTITY,
+  DEFAULT_ILLUMINA_MAX_OVERLAP_DIFFERENCES,
+} from '../../models/illumina-overlap-policy';
 
 export interface IlluminaPreprocessOptions {
   windowSize: number;
@@ -19,10 +30,6 @@ export interface IlluminaPreprocessOptions {
   minOverlapBases?: number;
   minOverlapIdentity?: number;
 }
-
-export const DEFAULT_ILLUMINA_MIN_OVERLAP_BASES = 10;
-export const DEFAULT_ILLUMINA_MIN_OVERLAP_IDENTITY = 0.80;
-export const DEFAULT_ILLUMINA_MAX_OVERLAP_DIFFERENCES = 5;
 
 interface TargetContext {
   key: string;
@@ -251,7 +258,7 @@ function findIlluminaOverlap(
     let differences = 0;
     let protectedComparableBases = 0;
     let protectedDifferences = 0;
-    const protectedLength = Math.min(overlapBases, 50);
+    const protectedLength = Math.min(overlapBases, DEFAULT_ILLUMINA_OVERLAP_CHECK_BASES);
     for (let i = 0; i < overlapBases; i++) {
       const a = aSeq[aStart + i];
       const b = bSeq[bStart + i];

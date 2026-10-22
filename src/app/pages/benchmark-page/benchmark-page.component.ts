@@ -7,6 +7,7 @@ import { LocalAnalysisService, LocalAnalysisEvent } from '../../services/local-a
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
 import { parseIlluminaFilename } from '../../models/illumina.model';
 import { benchmarkExampleRows, normalizationExampleMates } from '../../components/tutorial-guide/module-examples';
+import { ILLUMINA_OVERLAP_RULE } from '../../models/illumina-overlap-policy';
 
 @Component({
   selector: 'app-benchmark-page',
@@ -16,6 +17,7 @@ import { benchmarkExampleRows, normalizationExampleMates } from '../../component
   styleUrl: './benchmark-page.component.css'
 })
 export class BenchmarkPageComponent implements DoCheck, OnDestroy {
+  readonly overlapRule = ILLUMINA_OVERLAP_RULE;
   private mergeRevision = 0;
   private guideLocalSnapshot?: Record<string, any>;
   private readonly guideLocalKeys = ['benchmarkMode', 'benchmarkAdvancedOpen', 'mergeR1File', 'mergeR2File', 'mergeWindow', 'mergeOutputFile', 'mergeStats', 'mergeError', 'mergeProgress', 'mergeStage'];
