@@ -59,7 +59,7 @@ describe('guided interaction boundaries', () => {
     expect(guide.mascotPose).toBe('inspect');
     state.isCuratedView = true;
     expect(guide.mascotPose).toBe('success');
-    expect(guide.mascotSrc).toBe('guide-mascots/success.webp');
+    expect(guide.mascotSrc).toBe('guide-mascots/success.png');
     (guide as any).pendingAction = true;
     expect(guide.mascotPose).toBe('inspect');
     (guide as any).pendingAction = false;

@@ -6,15 +6,14 @@ import { GUIDE_MASCOT_ASSETS, guideMascotPose } from '../../src/app/components/t
 describe('contextual guide mascot', () => {
   it('uses the same lab-coat asset family for every pose', () => {
     expect(Object.keys(GUIDE_MASCOT_ASSETS)).toHaveLength(7);
-    for (const path of Object.values(GUIDE_MASCOT_ASSETS)) expect(path).toMatch(/^guide-mascots\/[a-z]+\.webp$/);
+    for (const path of Object.values(GUIDE_MASCOT_ASSETS)) expect(path).toMatch(/^guide-mascots\/[a-z]+\.png$/);
   });
 
-  it('ships every referenced pose as a small real WebP asset', () => {
+  it('ships every referenced pose as a portable PNG asset for static hosts', () => {
     for (const path of Object.values(GUIDE_MASCOT_ASSETS)) {
       const bytes = readFileSync(resolve('public', path));
-      expect(bytes.toString('ascii', 0, 4)).toBe('RIFF');
-      expect(bytes.toString('ascii', 8, 12)).toBe('WEBP');
-      expect(bytes.length).toBeLessThan(40_000);
+      expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+      expect(bytes.length).toBeLessThan(180_000);
     }
   });
 

@@ -1,13 +1,13 @@
 export type GuideMascotPose = 'idle' | 'wave' | 'point' | 'flask' | 'inspect' | 'checklist' | 'success';
 
 export const GUIDE_MASCOT_ASSETS: Record<GuideMascotPose, string> = {
-  idle: 'guide-mascots/idle.webp',
-  wave: 'guide-mascots/wave.webp',
-  point: 'guide-mascots/point.webp',
-  flask: 'guide-mascots/flask.webp',
-  inspect: 'guide-mascots/inspect.webp',
-  checklist: 'guide-mascots/checklist.webp',
-  success: 'guide-mascots/success.webp',
+  idle: 'guide-mascots/idle.png',
+  wave: 'guide-mascots/wave.png',
+  point: 'guide-mascots/point.png',
+  flask: 'guide-mascots/flask.png',
+  inspect: 'guide-mascots/inspect.png',
+  checklist: 'guide-mascots/checklist.png',
+  success: 'guide-mascots/success.png',
 };
 
 interface MascotStep {
