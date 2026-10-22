@@ -54,20 +54,20 @@ describe('presentation-only homoeolog comparison', () => {
   it('compares an arbitrary combination and models independent events without modifying read fractions', () => {
     const rows = source().rows, original = structuredClone(rows), combo = homeologCombination(rows)!;
     expect(combo.weakest.name).toBe('7D'); expect(combo.gap).toBe(30);
-    expect(combo.all).toBeCloseTo(10); expect(combo.any).toBeCloseTo(60);
-    expect(combo.distribution.map(d => d.percent)).toEqual([40, 50, 10]);
+    expect(combo.all).toBeCloseTo(6.75); expect(combo.any).toBeCloseTo(53.25);
+    expect(combo.distribution.map(d => d.percent).reduce((a,b)=>a+b,0)).toBeCloseTo(100);
     expect(rows).toEqual(original);
-    expect(homeologCombination(rows, 'indel')!.all).toBeCloseTo(6.75);
-    expect(homeologCombination(rows, 'outOfFrame')!.all).toBeCloseTo(1.75);
+    expect(homeologCombination(rows, ['inFrame','outOfFrame'])!.all).toBeCloseTo(6.75);
+    expect(homeologCombination(rows, ['outOfFrame'])!.all).toBeCloseTo(1.75);
   });
   it('switches the displayed co-editing basis without changing the read results', () => {
     const component = new HomoeologComparisonComponent(); component.genes = [gene('7A'), gene('7D',80)];
     const original = structuredClone(component.genes);
-    expect(component.combination!.all).toBeCloseTo(10);
-    component.coeditingMetric = 'outOfFrame';
-    expect(component.metricLabel).toBe('OOF only'); expect(component.combination!.all).toBeCloseTo(1.75);
-    component.coeditingMetric = 'indel';
-    expect(component.metricLabel).toBe('OOF + IF'); expect(component.combination!.all).toBeCloseTo(6.75);
+    expect(component.combination!.all).toBeCloseTo(6.75);
+    component.coeditingMetric = ['outOfFrame'];
+    expect(component.metricLabel).toBe('Out-of-frame'); expect(component.combination!.all).toBeCloseTo(1.75);
+    component.coeditingMetric = ['inFrame','outOfFrame'];
+    expect(component.metricLabel).toBe('In-frame + Out-of-frame'); expect(component.combination!.all).toBeCloseTo(6.75);
     expect(component.genes).toEqual(original);
   });
   it('does not silently ignore missing targets, zero depth or a single selection', () => {
@@ -79,7 +79,7 @@ describe('presentation-only homoeolog comparison', () => {
     const rows = comparisonRows(Array.from({length:20}, (_,i)=>gene(`R${i}`,50)), Array.from({length:20},(_,i)=>`R${i}`),'t1');
     const result = homeologCombination(rows)!;
     expect(result.distribution.reduce((n,d)=>n+d.percent,0)).toBeCloseTo(100);
-    const extremes = rows.slice(0,2).map((row,i)=>({...row,edited:i*100}));
+    const extremes = rows.slice(0,2).map((row,i)=>({...row,inFrame:0,outOfFrame:i*100}));
     expect(homeologCombination(extremes)!.distribution.map(d=>d.percent)).toEqual([0,100,0]);
   });
   it('excludes restorable curated groups from comparison and figures without modifying the original', () => {
@@ -94,17 +94,17 @@ describe('presentation-only homoeolog comparison', () => {
 describe('figure snapshots and publication SVG', () => {
   it('captures each co-editing panel basis and renders the matching calculation', () => {
     const composer = new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v} as any, {detectChanges:vi.fn()} as any);
-    composer.source = source(); composer.kind = 'coediting'; composer.coeditingMetric = 'outOfFrame'; composer.addPanel();
-    expect(composer.panels[0].coeditingMetric).toBe('outOfFrame');
-    expect(composer.svg).toContain('OOF only'); expect(composer.svg).toContain(`All 2: ${homeologCombination(source().rows, 'outOfFrame')!.all.toFixed(1)}%`);
-    composer.coeditingMetric = 'indel'; composer.addPanel();
-    expect(composer.panels[0].coeditingMetric).toBe('outOfFrame');
-    expect(composer.panels[1].coeditingMetric).toBe('indel');
-    expect(composer.svg).toContain('OOF + IF'); expect(composer.svg).toContain('All 2: 6.8%');
+    composer.source = source(); composer.kind = 'coediting'; composer.coeditingMetric = ['outOfFrame']; composer.addPanel();
+    expect(composer.panels[0].coeditingMetric).toEqual(['outOfFrame']);
+    expect(composer.svg).toContain('Out-of-frame'); expect(composer.svg).toContain(`All 2: ${homeologCombination(source().rows, ['outOfFrame'])!.all.toFixed(1)}%`);
+    composer.coeditingMetric = ['inFrame','outOfFrame']; composer.addPanel();
+    expect(composer.panels[0].coeditingMetric).toEqual(['outOfFrame']);
+    expect(composer.panels[1].coeditingMetric).toEqual(['inFrame','outOfFrame']);
+    expect(composer.svg).toContain('In-frame + Out-of-frame'); expect(composer.svg).toContain('All 2: 6.8%');
   });
   it('renders a selected-combination co-editing model with explicit assumptions', () => {
     const svg = renderFigure([{id:1,kind:'coediting',title:'Co-editing model',source:source()}],options);
-    expect(svg).toContain('All 2: 10.0%'); expect(svg).toContain('At least one: 60.0%');
+    expect(svg).toContain('All 2: 6.8%'); expect(svg).toContain('At least one: 53.3%');
     expect(svg).toContain('independence assumed'); expect(svg).toContain('not measured same-cell');
     expect(svg).toContain('0 / 2'); expect(svg).toContain('2 / 2');
     const missing = source(); missing.rows[0].edited = null;
@@ -229,12 +229,12 @@ describe('automatic and custom Figure rows', () => {
   });
   it('reflows two-cell sequences after drag/drop and preserves their co-editing basis', () => {
     const composer = new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v} as any,{detectChanges:vi.fn()} as any);
-    composer.source=source();composer.genes=[gene('7A'),gene('7D')];composer.active=true;composer.ngOnChanges();composer.kind='all';composer.coeditingMetric='outOfFrame';composer.addPanel();
+    composer.source=source();composer.genes=[gene('7A'),gene('7D')];composer.active=true;composer.ngOnChanges();composer.kind='all';composer.coeditingMetric=['outOfFrame'];composer.addPanel();
     composer.startDrag({dataTransfer:{setData:vi.fn()}} as any,2);
     composer.dropPanel({preventDefault:vi.fn(),stopPropagation:vi.fn()} as any,0,true);
     expect(composer.panels[0].kind).toBe('alleles'); expect(composer.previewLayout.slots[0].span).toBe(2);
     expect(composer.panels[2].kind).toBe('profile');
-    expect(composer.dragIndex).toBeNull(); expect(composer.panels.find(p=>p.kind==='coediting')!.coeditingMetric).toBe('outOfFrame');
+    expect(composer.dragIndex).toBeNull(); expect(composer.panels.find(p=>p.kind==='coediting')!.coeditingMetric).toEqual(['outOfFrame']);
   });
   it.each([[4,[2,2]],[5,[3,2]],[6,[3,3]],[7,[4,3]],[8,[4,4]],[9,[3,3,3]],[10,[4,3,3]],[11,[4,4,3]],[12,[4,4,4]]] as const)('balances %s panels without singleton rows', (count,expected) => {
     expect(figureRows(count,{columns:0,layout:'auto'})).toEqual(expected);

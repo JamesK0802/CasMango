@@ -28,7 +28,8 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
   homoeologOpen = false;
   figureOpen = false;
   figureInitialSource: FigureSource = { label: '', rows: [] };
-  coeditingMetric: CoeditingMetric = 'edited';
+  coeditingMetric: CoeditingMetric = ['inFrame', 'outOfFrame'];
+  coeditingSubsets: string[][] = [];
   activeWorkspacePane = 'standard';
   @ViewChild('workspaceTrack') workspaceTrack?: ElementRef<HTMLElement>;
   @ViewChild(HomoeologComparisonComponent) comparison?: HomoeologComparisonComponent;

@@ -139,7 +139,8 @@
 }
 
 /* Use available desktop space only when an optional result companion is open. */
-.crispr-body:has(.result-workspace.has-companions) { max-width: 1800px; }
+.crispr-body:has(.result-workspace.has-companions),
+.crispr-body:has(.figure-workspace:not([hidden])) { max-width: 1800px; }
 
 .header-section {
   display: flex;

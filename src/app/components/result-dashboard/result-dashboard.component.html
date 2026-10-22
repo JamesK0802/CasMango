@@ -668,11 +668,11 @@
           <strong>Homeolog analysis</strong>
           <button type="button" (click)="toggleHomoeolog()" aria-label="Close homoeolog comparison">×</button>
         </header>
-        <div class="workspace-pane-body"><app-homoeolog-comparison [genes]="presentationGenes" [scopeLabel]="scopeLabel" [(coeditingMetric)]="coeditingMetric" (inspect)="inspectHomoeolog($event)" /></div>
+        <div class="workspace-pane-body"><app-homoeolog-comparison [genes]="presentationGenes" [scopeLabel]="scopeLabel" [(coeditingMetric)]="coeditingMetric" [(coeditingSubsets)]="coeditingSubsets" (inspect)="inspectHomoeolog($event)" /></div>
       </section>
     </div>
   </div>
   <section id="guide-figure-workspace" class="figure-workspace" [class.guide-exploration]="state.guideReadActionsPreview" [hidden]="!figureOpen" aria-label="Figure workspace">
-    <app-figure-composer [source]="figureInitialSource" [genes]="presentationGenes" [active]="figureOpen" [(coeditingMetric)]="coeditingMetric" [previewOnly]="state.guideReadActionsPreview" />
+    <app-figure-composer [source]="figureInitialSource" [genes]="presentationGenes" [active]="figureOpen" [(coeditingMetric)]="coeditingMetric" [(coeditingSubsets)]="coeditingSubsets" [previewOnly]="state.guideReadActionsPreview" />
   </section>
 </div>

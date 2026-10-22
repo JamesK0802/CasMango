@@ -3,10 +3,12 @@ import { GeneResult } from '../../models/analysis.model';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, captureFigureSource, moveFigurePanel, renderFigure, figureRows, figureRowChoices, figurePanelLayout, CoeditingMetric, COEDITING_METRICS } from './result-presentation';
+import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, captureFigureSource, moveFigurePanel, renderFigure, figureRows, figureRowChoices, figurePanelLayout, CoeditingMetric } from './result-presentation';
+import { CoeditingBasisComponent } from './coediting-basis.component';
+import { CoeditingSubsetsComponent } from './coediting-subsets.component';
 
 @Component({
-  selector: 'app-figure-composer', standalone: true, imports: [CommonModule, FormsModule],
+  selector: 'app-figure-composer', standalone: true, imports: [CommonModule, FormsModule, CoeditingBasisComponent, CoeditingSubsetsComponent],
   template: `
     <section class="composer" [attr.data-figure-source]="origin" [attr.data-panel-count]="panels.length">
       <nav class="mobile-figure-tabs" aria-label="Figure workspace"><button type="button" [attr.aria-pressed]="mobilePane === 'setup'" (click)="mobilePane = 'setup'">Setup</button><button type="button" [attr.aria-pressed]="mobilePane === 'preview'" (click)="mobilePane = 'preview'">Figure</button></nav>
@@ -25,7 +27,8 @@ import { FigureKind, FigureOptions, FigurePanel, FigureSource, comparisonRows, c
         </div>
       </div>
       <div class="source-line">{{ selectedSource.label || 'Choose a source' }}</div>
-      <select *ngIf="sourceChoice === 'homeo' && (kind === 'coediting' || kind === 'all')" aria-label="Figure co-editing basis" [ngModel]="coeditingMetric" (ngModelChange)="coeditingMetric = $event; coeditingMetricChange.emit($event)"><option *ngFor="let metric of metrics" [value]="metric.value">{{ metric.label }}</option></select>
+      <app-coediting-basis *ngIf="sourceChoice === 'homeo' && (kind === 'coediting' || kind === 'all')" [selected]="coeditingMetric" (selectedChange)="coeditingMetric = $event; coeditingMetricChange.emit($event)" />
+      <app-coediting-subsets *ngIf="sourceChoice === 'homeo' && (kind === 'coediting' || kind === 'all') && coeditingMetric.length" [rows]="selectedSource.rows" [categories]="coeditingMetric" [selected]="coeditingSubsets" (selectedChange)="coeditingSubsets = $event; coeditingSubsetsChange.emit($event)" />
       <div class="add-row">
         <label class="sr-only" [for]="origin + '-figure-kind'">Panel type</label>
         <select [id]="origin + '-figure-kind'" [(ngModel)]="kind">
@@ -107,9 +110,10 @@ export class FigureComposerComponent implements OnChanges {
   @Input() genes: GeneResult[] = [];
   @Input() active = false;
   @Input() previewOnly = false;
-  @Input() coeditingMetric: CoeditingMetric = 'edited';
+  @Input() coeditingMetric: CoeditingMetric = ['inFrame', 'outOfFrame'];
   @Output() coeditingMetricChange = new EventEmitter<CoeditingMetric>();
-  metrics = COEDITING_METRICS;
+  @Input() coeditingSubsets: string[][] = [];
+  @Output() coeditingSubsetsChange = new EventEmitter<string[][]>();
   exportPreviewMessage = '';
   mobilePane: 'setup' | 'preview' = 'setup';
   previewZoom = 100;
@@ -141,7 +145,7 @@ export class FigureComposerComponent implements OnChanges {
   get rowChoices() { return figureRowChoices(this.panelCells); }
   previewLayout = figurePanelLayout([], {title:'', columns:0, fontSize:14, radius:30, groupLimit:5, minFrequency:2, palette:'okabe'});
   private get requestedKinds(): FigureKind[] { return this.kind === 'all' ? ['profile','editing','alleles','summary', ...(this.sourceChoice === 'homeo' ? ['coediting' as const] : [])] : [this.kind]; }
-  get canAddPanels() { return this.selectedSource.rows.length > 0 && this.panels.length + this.requestedKinds.length <= 12 && (!this.requestedKinds.includes('coediting') || this.selectedSource.rows.length >= 2); }
+  get canAddPanels() { return this.selectedSource.rows.length > 0 && this.panels.length + this.requestedKinds.length <= 12 && (!this.requestedKinds.includes('coediting') || (this.selectedSource.rows.length >= 2 && this.coeditingMetric.length > 0)); }
   panels: FigurePanel[] = [];
   kind: FigureKind | 'all' = 'profile';
   options: FigureOptions = { title: 'Editing outcomes', columns: 0, layout: 'auto', fontSize: 14, radius: 30, groupLimit: 5, minFrequency: 2, palette: 'okabe' };
@@ -167,7 +171,7 @@ export class FigureComposerComponent implements OnChanges {
     if (!this.canAddPanels) return;
     const titles = { profile: 'Mutation profile', editing: 'Non-WT reads', alleles: 'Cut-site sequences', summary: 'Read summary', coediting: 'Co-editing model' };
     const source = this.selectedSource;
-    this.panels = [...this.panels, ...this.requestedKinds.map(kind => ({ id: ++this.nextId, kind, title: titles[kind], source: captureFigureSource(source.label, source.rows), ...(kind === 'coediting' ? { coeditingMetric: this.coeditingMetric } : {}) }))];
+    this.panels = [...this.panels, ...this.requestedKinds.map(kind => ({ id: ++this.nextId, kind, title: titles[kind], source: captureFigureSource(source.label, source.rows), ...(kind === 'coediting' ? { coeditingMetric: [...this.coeditingMetric], coeditingSubsets: this.coeditingSubsets.map(names => [...names]) } : {}) }))];
     this.refresh();
   }
   refresh() {

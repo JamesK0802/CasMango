@@ -61,19 +61,41 @@ export interface FigureSource { label: string; rows: ComparisonRow[]; }
  * with independence between loci. Bulk amplicons cannot establish either premise.
  * Missing loci invalidate the whole selected combination; never drop them silently.
  */
-export type CoeditingMetric = 'edited' | 'indel' | 'outOfFrame';
-export const COEDITING_METRICS: { value: CoeditingMetric; label: string }[] = [
-  { value: 'outOfFrame', label: 'OOF only' },
-  { value: 'indel', label: 'OOF + IF' },
-  { value: 'edited', label: 'Non-WT' }
+export type CoeditingCategory = 'wt' | 'inFrame' | 'outOfFrame';
+export type CoeditingMetric = readonly CoeditingCategory[];
+export const COEDITING_METRICS: { value: CoeditingCategory; label: string }[] = [
+  { value: 'wt', label: 'WT' },
+  { value: 'inFrame', label: 'In-frame' },
+  { value: 'outOfFrame', label: 'Out-of-frame' }
 ];
-export function coeditingMetricLabel(metric: CoeditingMetric = 'edited'): string {
-  return COEDITING_METRICS.find(item => item.value === metric)!.label;
+export function coeditingMetricLabel(metric: CoeditingMetric = ['inFrame', 'outOfFrame']): string {
+  return COEDITING_METRICS.filter(item => metric.includes(item.value)).map(item => item.label).join(' + ') || '—';
 }
-export function homeologCombination(rows: ComparisonRow[], metric: CoeditingMetric = 'edited') {
-  const values = rows.map(row => ({ name: row.name, rate: row.edited === null ? null :
-    metric === 'indel' ? (row.inFrame ?? 0) + (row.outOfFrame ?? 0) : row[metric] }));
-  if (values.length < 2 || values.some(value => value.rate === null)) return null;
+function coeditingRates(rows: ComparisonRow[], metric: CoeditingMetric) {
+  const categories = [...new Set(metric)];
+  if (!categories.length || rows.length < 2 || rows.some(row => row.edited === null || categories.some(category => row[category] === null))) return null;
+  return rows.map(row => ({name:row.name, rate:Math.max(0,Math.min(100,categories.reduce((sum,category)=>sum+row[category]!,0)))}));
+}
+export interface CoeditingSubset { names: string[]; percent: number; }
+export function homeologSubset(rows: ComparisonRow[], metric: CoeditingMetric, names: readonly string[]): CoeditingSubset | null {
+  const rates = coeditingRates(rows,metric), selected = new Set(names);
+  if (!rates || !selected.size || selected.size >= rows.length || selected.size !== names.length || names.some(name=>!rates.some(row=>row.name===name))) return null;
+  return { names:rates.filter(row=>selected.has(row.name)).map(row=>row.name), percent:rates.reduce((p,row)=>p*(selected.has(row.name) ? row.rate/100 : 1-row.rate/100),1)*100 };
+}
+export function homeologSubsets(rows: ComparisonRow[], metric: CoeditingMetric, count: number, limit = 50) {
+  const items: CoeditingSubset[] = [];
+  if (!coeditingRates(rows,metric) || count < 1 || count >= rows.length) return {items,hasMore:false};
+  const visit = (start:number, names:string[]) => {
+    if (items.length > limit) return;
+    if (names.length === count) { const item=homeologSubset(rows,metric,names); if(item) items.push(item); return; }
+    for(let i=start;i<=rows.length-(count-names.length);i++) { visit(i+1,[...names,rows[i].name]); if(items.length>limit) break; }
+  };
+  visit(0,[]);
+  return {items:items.slice(0,limit),hasMore:items.length>limit};
+}
+export function homeologCombination(rows: ComparisonRow[], metric: CoeditingMetric = ['inFrame', 'outOfFrame']) {
+  const values = coeditingRates(rows,metric);
+  if (!values) return null;
   const rates = values.map(value => Math.max(0, Math.min(1, value.rate! / 100)));
   let distribution = [1];
   for (const p of rates) {
@@ -88,7 +110,10 @@ export function homeologCombination(rows: ComparisonRow[], metric: CoeditingMetr
     distribution: distribution.map((p, count) => ({ count, percent: p * 100 })) };
 }
 export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary' | 'coediting';
-export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; coeditingMetric?: CoeditingMetric; }
+export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; coeditingMetric?: CoeditingMetric; coeditingSubsets?: readonly string[][]; }
+function figureCoeditingSubsets(panel: FigurePanel): CoeditingSubset[] {
+  return (panel.coeditingSubsets ?? []).map(names=>homeologSubset(panel.source.rows,panel.coeditingMetric ?? ['inFrame','outOfFrame'],names)).filter((item):item is CoeditingSubset=>!!item);
+}
 export interface FigureOptions { title: string; columns: number; layout?: string; fontSize: number; radius: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }
 
 export function figureRows(count: number, options: Pick<FigureOptions, 'columns' | 'layout'>): number[] {
@@ -157,7 +182,7 @@ export function sequenceCells(target: TargetResult, groupIndex: number, radius: 
 export interface FigureSlot { index: number; row: number; col: number; span: number; x: number; y: number; width: number; height: number; }
 export function figurePanelLayout(panels: FigurePanel[], options: FigureOptions): { width: number; height: number; slots: FigureSlot[] } {
   const gap = 24, margin = 28;
-  const panelHeight = (panel: FigurePanel) => panel.kind === 'coediting' ? 156 + (panel.source.rows.length + 1) * 34 : panel.kind === 'alleles'
+  const panelHeight = (panel: FigurePanel) => panel.kind === 'coediting' ? 156 + (panel.source.rows.length + 1 + figureCoeditingSubsets(panel).length) * 34 : panel.kind === 'alleles'
     ? 90 + panel.source.rows.reduce((height, row) => height + 56 + Math.min(options.groupLimit, (row.target?.top_groups ?? []).filter(g => g.read_pct >= options.minFrequency).length) * 30, 0)
     : 112 + panel.source.rows.length * (panel.kind === 'summary' ? 38 : 56);
   const rows = figureRows(panels.length, options);
@@ -249,7 +274,13 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
           body += `<rect x="${barX}" y="${top}" width="${barWidth}" height="20" rx="3" fill="#f1f5f9"/><rect x="${barX}" y="${top}" width="${barWidth * item.percent / 100}" height="20" rx="3" fill="${colors[2]}"/>`;
           body += text(barX + barWidth + 8, top + 15, fmt(item.percent), 12);
         }
-        body += text(0, 142 + model.distribution.length * 34, 'Model, not measured same-cell editing.', 11, 'fill="#64748b"');
+        const subsets = figureCoeditingSubsets(panel);
+        for (const [i,item] of subsets.entries()) {
+          const top = 112 + (model.distribution.length+i)*34;
+          body += text(0,top+15,short(item.names.join(' + '),Math.floor(inner/8)),11);
+          body += text(inner-40,top+15,fmt(item.percent),11);
+        }
+        body += text(0, 142 + (model.distribution.length + subsets.length) * 34, 'Model, not measured same-cell editing.', 11, 'fill="#64748b"');
       }
     } else if (panel.kind === 'summary') {
       const columns = [0, inner * .26, inner * .43, inner * .60, inner * .77];

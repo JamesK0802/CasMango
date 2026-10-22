@@ -2,10 +2,12 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { GeneResult } from '../../models/analysis.model';
-import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource, CoeditingMetric, COEDITING_METRICS, coeditingMetricLabel } from './result-presentation';
+import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource, CoeditingMetric, coeditingMetricLabel } from './result-presentation';
+import { CoeditingBasisComponent } from './coediting-basis.component';
+import { CoeditingSubsetsComponent } from './coediting-subsets.component';
 
 @Component({
-  selector: 'app-homoeolog-comparison', standalone: true, imports: [CommonModule, FormsModule],
+  selector: 'app-homoeolog-comparison', standalone: true, imports: [CommonModule, FormsModule, CoeditingBasisComponent, CoeditingSubsetsComponent],
   template: `
     <div class="comparison" id="guide-homeo-comparison" [attr.data-selection-count]="selectedNames.length">
       <div class="selectors"><label>Group<select aria-label="Homeolog group" [ngModel]="activeGroup" (ngModelChange)="setGroup($event)"><option *ngFor="let name of groupNames" [value]="name">{{ name }}</option></select></label>
@@ -15,17 +17,17 @@ import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource, Coedi
         <button type="button" *ngFor="let gene of groupGenes; let i = index" [attr.data-reference]="gene.gene"
           [attr.id]="i === 1 ? 'guide-homeo-second-reference' : null" [attr.aria-pressed]="selectedNames.includes(gene.gene)"
           [class.selected]="selectedNames.includes(gene.gene)" (click)="toggle(gene.gene)"><span>{{ selectedNames.includes(gene.gene) ? '✓' : '+' }}</span> {{ gene.gene }}</button>
-      </div><select class="coediting-basis" aria-label="Co-editing basis" [ngModel]="coeditingMetric" (ngModelChange)="coeditingMetric = $event; coeditingMetricChange.emit($event)"><option *ngFor="let metric of metrics" [value]="metric.value">{{ metric.label }}</option></select></div>
+      </div><app-coediting-basis [selected]="coeditingMetric" (selectedChange)="coeditingMetric = $event; coeditingMetricChange.emit($event)" /></div>
       <ng-container *ngIf="rows.length; else empty">
         <section class="combination-analysis">
           <h3>Co-editing model <small>· {{ metricLabel }} · independence assumed</small></h3>
           <ng-container *ngIf="combination as combo; else incomplete">
             <div class="model">
               <div class="model-totals"><span>All {{ rows.length }} selected: <strong>{{ format(combo.all) }}</strong></span><span>At least one: <strong>{{ format(combo.any) }}</strong></span></div>
-              <div class="model-row" *ngFor="let item of combo.distribution"><span>{{ item.count }} / {{ rows.length }}</span><div class="model-track"><i [style.width.%]="item.percent"></i></div><strong>{{ format(item.percent) }}</strong></div>
+              <div class="model-row" *ngFor="let item of combo.distribution; trackBy: trackCount"><span style="display:flex;align-items:center;min-width:70px">{{ item.count }} / {{ rows.length }}<app-coediting-subsets *ngIf="item.count > 0 && item.count < rows.length" [count]="item.count" [rows]="rows" [categories]="coeditingMetric" [selected]="coeditingSubsets" (selectedChange)="coeditingSubsets = $event; coeditingSubsetsChange.emit($event)" /></span><div class="model-track"><i [style.width.%]="item.percent"></i></div><strong>{{ format(item.percent) }}</strong></div>
             </div>
           </ng-container>
-          <ng-template #incomplete><p class="note">{{ rows.length < 2 ? 'Select at least two references.' : 'Every selected reference needs aligned reads for this target.' }}</p></ng-template>
+          <ng-template #incomplete><p class="note" *ngIf="coeditingMetric.length">{{ rows.length < 2 ? 'Select at least two references.' : 'Every selected reference needs aligned reads for this target.' }}</p></ng-template>
         </section>
         <section class="profile"><h3>Editing profile</h3>
           <div class="legend"><span *ngFor="let name of labels; let i = index"><i [style.background]="colors[i]"></i>{{ name }}</span></div>
@@ -50,7 +52,7 @@ import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource, Coedi
       <ng-template #empty><div class="empty">Select references to compare.</div></ng-template>
     </div>`,
   styles: [`
-    .reference-selection{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.reference-selection .reference-picker{flex:1;min-width:0}.coediting-basis{width:auto;min-width:120px;margin-left:auto}
+    .reference-selection{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.reference-selection .reference-picker{flex:1;min-width:0}.reference-selection app-coediting-basis{margin-left:auto}
     .balance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.balance>div{display:grid;align-content:start;gap:6px;padding:12px;background:#f8fafc;border-radius:8px;overflow-wrap:anywhere}.balance small{font-size:11px;color:#64748b}.balance strong{font-size:14px}.balance span{font-size:13px}.model-totals{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;margin:14px 0}.model-row{display:flex;align-items:center;gap:10px;font-size:11px;margin:9px 0}.model-row>span{min-width:45px}.model-row>strong{min-width:50px;text-align:right}.model-track{flex:1;background:#f1f5f9;height:14px;border-radius:3px;overflow:hidden}.model-track i{display:block;height:100%;background:#0072b2}.combination-analysis>label{max-width:220px;margin-bottom:18px}
     :host{display:block;min-width:0}.comparison{padding:18px}.selectors{display:flex;gap:12px}label{display:grid;gap:5px;font-size:11px;color:var(--color-text-secondary,#64748b)}.selectors label{flex:1;min-width:0}
     button,input,select{font:inherit;color:inherit;border:1px solid var(--color-border,#dbe1e8);background:var(--color-surface,#fff);border-radius:7px;padding:7px 10px;font-size:12px}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}select{width:100%;min-width:0}
@@ -63,10 +65,12 @@ import { comparisonRows, homeologCombination, FIGURE_COLORS, FigureSource, Coedi
 export class HomoeologComparisonComponent {
   @Input() genes: GeneResult[] = [];
   @Input() scopeLabel = '';
-  @Input() coeditingMetric: CoeditingMetric = 'edited';
+  @Input() coeditingMetric: CoeditingMetric = ['inFrame', 'outOfFrame'];
   @Output() coeditingMetricChange = new EventEmitter<CoeditingMetric>();
-  metrics = COEDITING_METRICS;
+  @Input() coeditingSubsets: string[][] = [];
+  @Output() coeditingSubsetsChange = new EventEmitter<string[][]>();
   get metricLabel() { return coeditingMetricLabel(this.coeditingMetric); }
+  trackCount(_: number, item: {count: number}) { return item.count; }
   @Output() inspect = new EventEmitter<string>();
   group = ''; target = ''; selection: string[] | null = null;
   colors = FIGURE_COLORS.okabe;
