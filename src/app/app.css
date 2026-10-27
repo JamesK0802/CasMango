@@ -110,6 +110,7 @@ button.nav-brand:disabled{cursor:not-allowed;opacity:.55}
 .public-screen{display:flex;flex-direction:column;min-height:calc(100vh - var(--nav-height));background:#fcfcfb}
 .public-site-footer{display:flex;justify-content:space-between;align-items:center;gap:20px;width:100%;max-width:1060px;margin:0 auto;padding:20px 30px 26px;font-size:10px;color:#a1a6ad}
 .contact-nav-link{border:0;background:none;font:inherit;color:#9098a4;font-size:11px;cursor:pointer}.contact-nav-link:disabled{cursor:not-allowed;opacity:.5}
+.contact-nav-link.active{color:#b27b16}
 .btn-guide-trigger:disabled{opacity:.5;cursor:not-allowed}
 .public-nav-links .btn-tab{font-size:12px;font-weight:550}
 .public-site-footer a:focus-visible,button.nav-brand:focus-visible,.contact-nav-link:focus-visible{outline:2px solid #e7a52a;outline-offset:3px}

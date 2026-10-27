@@ -61,7 +61,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
           <div
             class="desktop-nav-links"
             id="guide-nav-links"
-            *ngIf="page === 'tool'"
+            *ngIf="page !== 'home'"
           >
             <button
               class="nav-tab btn-tab"
@@ -116,7 +116,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
           </div>
           <div
             class="desktop-nav-links public-nav-links"
-            *ngIf="page !== 'tool'"
+            *ngIf="page === 'home'"
           >
             <button
               type="button"
@@ -127,7 +127,6 @@ const TAB_ROUTES: Record<MainTab, string> = {
             ><button
               type="button"
               class="btn-tab"
-              [class.active]="page === 'contact'"
               (click)="showPage('contact')"
             >
               Contact
@@ -139,7 +138,8 @@ const TAB_ROUTES: Record<MainTab, string> = {
           <button
             type="button"
             class="contact-nav-link"
-            *ngIf="page === 'tool'"
+            *ngIf="page !== 'home'"
+            [class.active]="page === 'contact'"
             [disabled]="state.isAnalysisRunning"
             (click)="showPage('contact')"
           >

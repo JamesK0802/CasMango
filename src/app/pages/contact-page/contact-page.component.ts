@@ -6,10 +6,9 @@ import { Component, EventEmitter, Output } from '@angular/core';
   template: `
     <section class="contact-page" aria-labelledby="contact-title">
       <div class="contact-intro">
-        <span class="eyebrow">GET IN TOUCH</span>
-        <h1 id="contact-title">Contact me.</h1>
-        <p class="invitation">Something to add?<br />Something not working?</p>
-        <p class="description">Feature ideas, bug reports, questions, or feedback — feel free to reach out. I’d love to hear how CasMango can work better for you.</p>
+        <span class="eyebrow">CASMANGO</span>
+        <h1 id="contact-title">Contact me</h1>
+        <p class="description">For feature requests, bug reports, or questions about CasMango, please feel free to get in touch.</p>
         <button type="button" class="back-link" (click)="goHome.emit()">← Back to home</button>
       </div>
       <div class="contact-details">
@@ -17,7 +16,7 @@ import { Component, EventEmitter, Output } from '@angular/core';
         <h2>James Kim</h2>
         <a class="email-link" href="mailto:James.Kim@anu.edu.au?subject=CasMango%20feedback">James.Kim&#64;anu.edu.au <span aria-hidden="true">↗</span></a>
         <p class="affiliation">Research School of Biology<br />The Australian National University</p>
-        <a class="issue-link" href="https://github.com/JamesK0802/CasMango/issues" target="_blank" rel="noopener noreferrer">Prefer GitHub? Open an issue <span aria-hidden="true">↗</span></a>
+        <a class="issue-link" href="https://github.com/JamesK0802/CasMango/issues" target="_blank" rel="noopener noreferrer">GitHub Issues <span aria-hidden="true">↗</span></a>
       </div>
     </section>
   `,
@@ -26,7 +25,6 @@ import { Component, EventEmitter, Output } from '@angular/core';
     .contact-page { width: 100%; max-width: 1120px; margin: auto; padding: clamp(60px, 10vh, 120px) 40px; display: grid; grid-template-columns: 1.15fr 1fr; align-items: center; gap: clamp(48px, 8vw, 120px); color: #202b3d; box-sizing: border-box; }
     .eyebrow { display: block; color: #997331; font-size: 11px; font-weight: 700; letter-spacing: .13em; }
     h1 { margin: 20px 0 28px; font-size: clamp(42px, 5vw, 64px); line-height: 1.05; letter-spacing: -.045em; font-weight: 650; }
-    .invitation { margin: 0 0 18px; font-size: clamp(21px, 2.3vw, 28px); line-height: 1.45; letter-spacing: -.02em; }
     .description { max-width: 440px; margin: 0; color: #687381; font-size: 16px; line-height: 1.85; }
     .back-link { margin-top: 40px; padding: 5px 0; border: 0; background: transparent; color: #6d7580; font: inherit; font-size: 13px; cursor: pointer; }
     .contact-details { border-left: 1px solid #e3e5e5; padding: 40px 0 40px clamp(30px, 4vw, 60px); }
