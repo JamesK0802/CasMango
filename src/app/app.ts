@@ -61,7 +61,6 @@ const TAB_ROUTES: Record<MainTab, string> = {
           <div
             class="desktop-nav-links"
             id="guide-nav-links"
-            *ngIf="page !== 'home'"
           >
             <button
               class="nav-tab btn-tab"
@@ -114,31 +113,12 @@ const TAB_ROUTES: Record<MainTab, string> = {
               Sequence Viewer
             </button>
           </div>
-          <div
-            class="desktop-nav-links public-nav-links"
-            *ngIf="page === 'home'"
-          >
-            <button
-              type="button"
-              class="btn-tab"
-              (click)="switchTab('analysis')"
-            >
-              Analysis</button
-            ><button
-              type="button"
-              class="btn-tab"
-              (click)="showPage('contact')"
-            >
-              Contact
-            </button>
-          </div>
         </div>
 
         <div class="nav-right">
           <button
             type="button"
             class="contact-nav-link"
-            *ngIf="page !== 'home'"
             [class.active]="page === 'contact'"
             [disabled]="state.isAnalysisRunning"
             (click)="showPage('contact')"
@@ -270,15 +250,11 @@ const TAB_ROUTES: Record<MainTab, string> = {
             <app-landing-page
               *ngIf="page === 'home'"
               (openTool)="switchTab($event)"
-              (openGuide)="openGuide()"
             />
             <app-contact-page
               *ngIf="page === 'contact'"
               (goHome)="showPage('home')"
             />
-            <footer class="public-site-footer">
-              <span>CasMango · Analysis stays on your device.</span>
-            </footer>
           </div>
           <div
             class="crispr-body"

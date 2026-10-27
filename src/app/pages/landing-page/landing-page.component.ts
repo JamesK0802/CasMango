@@ -1,261 +1,66 @@
-import { Component, EventEmitter, Output } from "@angular/core";
-import { CommonModule } from "@angular/common";
+import { Component, EventEmitter, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+
 @Component({
-  selector: "app-landing-page",
+  selector: 'app-landing-page',
   standalone: true,
   imports: [CommonModule],
-  template: ` <section class="landing">
-    <div class="landing-hero">
-      <div class="hero-copy">
-        <span class="eyebrow">CASMANGO · LOCAL CRISPR ANALYSIS</span>
-        <h1>From sequencing reads<br />to editing outcomes.</h1>
-        <p>
-          Analyse Nanopore and Illumina reads in your browser.<br />No account.
-          No uploads.
-        </p>
-        <div class="hero-actions">
-          <button
-            type="button"
-            class="start-button"
-            (click)="openTool.emit('analysis')"
-          >
-            Start analysis <span>→</span></button
-          ><button type="button" class="guide-link" (click)="openGuide.emit()">
-            Explore the guide ↗
-          </button>
+  template: `
+    <section class="landing" aria-labelledby="landing-title">
+      <div class="landing-hero">
+        <div class="hero-copy">
+          <h1 id="landing-title">Cas<span>MANGO</span></h1>
+          <p class="full-name">CRISPR Amplicon Sequencing with Multiplexed Assignment of NGS reads for Genotyping and Outcome analysis</p>
         </div>
+        <img class="hero-mascot" src="guide-mascots/wave.png" alt="CasMango scientist mascot" />
       </div>
-      <div class="hero-mascot">
-        <img
-          src="guide-mascots/wave.png"
-          alt="CasMango scientist mascot"
-        /><span>Small tool. Clear outcomes.</span>
+      <div class="tool-buttons">
+        <button type="button" *ngFor="let tool of tools" [class.primary]="tool.tab === 'analysis'" (click)="openTool.emit(tool.tab)">
+          <span>{{ tool.name }}</span><span class="arrow" aria-hidden="true">↗</span>
+        </button>
       </div>
-    </div>
-    <div class="quick-tools">
-      <button
-        type="button"
-        *ngFor="let tool of tools"
-        (click)="openTool.emit(tool.tab)"
-      >
-        <span class="tool-symbol">{{ tool.symbol }}</span>
-        <div>
-          <h2>{{ tool.name }}</h2>
-          <p>{{ tool.description }}</p>
-        </div>
-        <span class="tool-arrow">↗</span>
-      </button>
-    </div>
-  </section>`,
-  styles: [
-    `
-      :host {
-        display: block;
-        flex: 1;
-      }
-      .landing {
-        max-width: 1060px;
-        margin: 0 auto;
-        padding: 65px 30px 50px;
-        color: #202b3d;
-      }
-      .landing-hero {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 240px;
-        align-items: center;
-        gap: 50px;
-        padding: 25px 0 70px;
-      }
-      .eyebrow {
-        font-size: 10px;
-        letter-spacing: 0.15em;
-        font-weight: 700;
-        color: #ad7a1a;
-      }
-      h1 {
-        font-size: clamp(34px, 4.5vw, 52px);
-        font-weight: 650;
-        line-height: 1.14;
-        letter-spacing: -1.8px;
-        margin: 20px 0;
-      }
-      .hero-copy > p {
-        font-size: 15px;
-        line-height: 1.75;
-        color: #7c8795;
-      }
-      .hero-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 24px;
-        margin-top: 30px;
-      }
-      button {
-        font: inherit;
-        cursor: pointer;
-      }
-      .start-button {
-        display: flex;
-        gap: 32px;
-        align-items: center;
-        padding: 13px 19px;
-        border: 1px solid #ed9f07;
-        border-radius: 8px;
-        background: #f59e0b;
-        color: #fff;
-        font-size: 13px;
-        font-weight: 650;
-      }
-      .start-button:hover {
-        background: #e99500;
-      }
-      .guide-link {
-        padding: 8px 0;
-        background: none;
-        border: 0;
-        font-size: 12px;
-        color: #89909a;
-      }
-      .guide-link:hover {
-        color: #9b6a12;
-      }
-      .hero-mascot {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 18px;
-      }
-      .hero-mascot img {
-        display: block;
-        height: 190px;
-        max-width: 180px;
-        object-fit: contain;
-      }
-      .hero-mascot > span {
-        font-size: 10px;
-        color: #a6a7a6;
-        letter-spacing: 0.04em;
-      }
-      .quick-tools {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 15px;
-        border-top: 1px solid #e8ebed;
-        padding-top: 30px;
-      }
-      .quick-tools > button {
-        display: flex;
-        gap: 13px;
-        align-items: flex-start;
-        text-align: left;
-        border: 1px solid #e6e9ed;
-        background: #fff;
-        border-radius: 11px;
-        padding: 23px 18px;
-        transition: border-color 0.15s;
-      }
-      .quick-tools > button:hover {
-        border-color: #efc575;
-      }
-      .tool-symbol {
-        width: 30px;
-        flex-shrink: 0;
-        font-size: 25px;
-        line-height: 1;
-        color: #b49a65;
-      }
-      .quick-tools h2 {
-        font-size: 13px;
-        font-weight: 650;
-        margin: 0 0 8px;
-      }
-      .quick-tools p {
-        font-size: 11px;
-        line-height: 1.6;
-        color: #9aa0aa;
-        margin: 0;
-      }
-      .tool-arrow {
-        margin-left: auto;
-        font-size: 15px;
-        color: #b1b5bc;
-      }
-      button:focus-visible {
-        outline: 2px solid #e79b0e;
-        outline-offset: 4px;
-      }
-      @media (max-width: 760px) {
-        .landing {
-          padding: 35px 22px;
-        }
-        .landing-hero {
-          grid-template-columns: minmax(0, 1fr) 110px;
-          gap: 15px;
-          padding: 10px 0 42px;
-        }
-        .hero-mascot img {
-          height: 110px;
-          max-width: 100px;
-        }
-        .hero-mascot > span {
-          display: none;
-        }
-        .quick-tools {
-          grid-template-columns: 1fr;
-        }
-        .hero-copy > p {
-          font-size: 13px;
-        }
-        h1 {
-          font-size: 34px;
-          letter-spacing: -1px;
-        }
-        .eyebrow {
-          font-size: 8px;
-        }
-        .hero-actions {
-          gap: 15px;
-        }
-      }
-      @media (max-width: 420px) {
-        .landing-hero {
-          grid-template-columns: 1fr;
-        }
-        .hero-mascot {
-          display: none;
-        }
-      }
-    `,
-  ],
+    </section>
+  `,
+  styles: [`
+    :host { display: flex; flex: 1; }
+    .landing { width: 100%; max-width: 1120px; margin: auto; padding: 70px 40px 95px; box-sizing: border-box; color: #202b3d; }
+    .landing-hero { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 70px; align-items: center; padding-bottom: 65px; }
+    h1 { margin: 0 0 24px; font-size: clamp(54px, 6vw, 78px); line-height: 1.1; letter-spacing: -.045em; font-weight: 650; }
+    h1 span { color: #ed9b09; }
+    .full-name { max-width: 680px; margin: 0; font-size: clamp(19px, 2.2vw, 25px); line-height: 1.65; color: #637080; letter-spacing: -.015em; }
+    .hero-mascot { display: block; width: 100%; height: 205px; object-fit: contain; }
+    .tool-buttons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    button { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 23px 20px; border: 1px solid #dfe3e7; border-radius: 10px; background: #fff; color: #344154; font: inherit; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+    button:hover { border-color: #e3ac45; background: #fffaf0; }
+    button.primary { background: #fff7e6; border-color: #efc375; color: #9b6410; }
+    button.primary:hover { background: #ffedc6; border-color: #e3ac45; }
+    .arrow { color: #9b8c70; font-size: 18px; }
+    button:focus-visible { outline: 2px solid #e79b0e; outline-offset: 4px; }
+    @media(max-width: 900px) {
+      .landing-hero { grid-template-columns: minmax(0, 1fr) 150px; gap: 30px; }
+      .hero-mascot { height: 160px; }
+      .tool-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media(max-width: 600px) {
+      .landing { padding: 45px 24px; }
+      .landing-hero { grid-template-columns: minmax(0, 1fr) 85px; gap: 16px; padding-bottom: 38px; }
+      .hero-mascot { height: 100px; }
+      h1 { font-size: 46px; margin-bottom: 18px; }
+      .full-name { font-size: 17px; }
+      button { font-size: 13px; padding: 20px 14px; gap: 8px; }
+    }
+    @media(max-width: 420px) {
+      .landing-hero { grid-template-columns: 1fr; }
+      .hero-mascot { display: none; }
+    }
+  `],
 })
 export class LandingPageComponent {
-  @Output() openTool = new EventEmitter<
-    "analysis" | "viewer" | "workspace" | "benchmark"
-  >();
-  @Output() openGuide = new EventEmitter<void>();
-  tools: [
-    { tab: "viewer"; name: string; description: string; symbol: string },
-    { tab: "workspace"; name: string; description: string; symbol: string },
-    { tab: "benchmark"; name: string; description: string; symbol: string },
-  ] = [
-    {
-      tab: "viewer",
-      name: "Result Viewer",
-      description: "Reopen exported results and explore editing profiles.",
-      symbol: "▥",
-    },
-    {
-      tab: "workspace",
-      name: "Sequence Viewer",
-      description: "Inspect sequences, reads and alignments.",
-      symbol: "≋",
-    },
-    {
-      tab: "benchmark",
-      name: "Benchmark",
-      description: "Explore analysis accuracy with example data.",
-      symbol: "◷",
-    },
-  ];
+  @Output() openTool = new EventEmitter<'analysis' | 'viewer' | 'workspace' | 'benchmark'>();
+  readonly tools = [
+    { tab: 'analysis', name: 'CRISPR Analysis' },
+    { tab: 'viewer', name: 'Result Viewer' },
+    { tab: 'benchmark', name: 'Benchmark' },
+    { tab: 'workspace', name: 'Sequence Viewer' },
+  ] as const;
 }
