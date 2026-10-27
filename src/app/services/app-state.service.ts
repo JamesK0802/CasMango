@@ -7,7 +7,7 @@ import { ExcelExportService, ExportParams } from './excel-export.service';
 import { CurationService } from './curation.service';
 import { LocalAnalysisService, LocalAnalysisEvent } from './local-analysis.service';
 import { SequenceWorkspaceService } from './sequence-workspace.service';
-import { extractWindow, findGrnaCutSite } from '../workers/core/classifier';
+import { annotationAlignmentConfig } from '../models/sequence-alignment-config';
 import { GeneResult, MultiReferenceResponse, BenchmarkRow, BenchmarkResult } from '../models/analysis.model';
 import { CurationConfig, emptyCurationConfig, targetKey, groupKey } from '../models/curation.model';
 import { Chart } from 'chart.js/auto';
@@ -1420,16 +1420,7 @@ export class AppStateService {
         const text = await new Blob(blobs, { type: 'text/plain' }).text();
         const filename = `${target.target_id}_Group_${group.group_rank}.fastq`;
 
-        const refSeq = target.ref_sequence || target.reference_seq || '';
-        const grnaSeq = target.sgrna_seq || '';
-        const winSize = target.window_size || 90;
-        let windowSeq = target.ref_window || '';
-        if (!windowSeq && refSeq) {
-          const cutInfo = findGrnaCutSite(refSeq, grnaSeq);
-          windowSeq = extractWindow(refSeq, cutInfo.cut_site, winSize);
-        }
-
-        const autoAlign = { windowSeq, refSeq, grnaSeq, winSize };
+        const autoAlign = annotationAlignmentConfig(target);
         const generatedFile = new File([text], filename, { type: 'text/plain' });
         await this.sequenceWorkspaceService.importGeneratedFastq(generatedFile, autoAlign);
       }
@@ -1477,16 +1468,7 @@ export class AppStateService {
         const text = await new Blob(blobs, { type: 'text/plain' }).text();
         const filename = `${target.target_id}_All_Reads.fastq`;
 
-        const refSeq = target.ref_sequence || target.reference_seq || '';
-        const grnaSeq = target.sgrna_seq || '';
-        const winSize = target.window_size || 90;
-        let windowSeq = target.ref_window || '';
-        if (!windowSeq && refSeq) {
-          const cutInfo = findGrnaCutSite(refSeq, grnaSeq);
-          windowSeq = extractWindow(refSeq, cutInfo.cut_site, winSize);
-        }
-
-        const autoAlign = { windowSeq, refSeq, grnaSeq, winSize };
+        const autoAlign = annotationAlignmentConfig(target);
         const generatedFile = new File([text], filename, { type: 'text/plain' });
         await this.sequenceWorkspaceService.importGeneratedFastq(generatedFile, autoAlign);
       }

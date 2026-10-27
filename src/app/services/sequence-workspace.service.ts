@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, combineLatest, map } from 'rxjs';
-import { ProjectItem, SequenceDocument, SequenceFeature } from '../models/sequence.model';
+import { AutoAlignConfig, ProjectItem, SequenceDocument, SequenceFeature } from '../models/sequence.model';
 import { parseFasta, parseGenBank, parseFastqFile } from '../utils/parsers.utils';
 import { shiftFeatures } from '../utils/biology.utils';
 import { exportToFasta, exportToGenBank } from '../utils/export.utils';
@@ -9,12 +9,7 @@ const DB_NAME = 'SequenceWorkspaceDB';
 const STORE_NAME = 'ProjectItems';
 const DB_VERSION = 1;
 
-export interface AutoAlignPayload {
-  windowSeq: string;
-  refSeq?: string;
-  grnaSeq?: string;
-  winSize?: number;
-}
+export type AutoAlignPayload = AutoAlignConfig;
 
 @Injectable({
   providedIn: 'root'

@@ -86,6 +86,8 @@ export interface FastqStats {
 
 export interface AutoAlignConfig {
   windowSeq: string;
+  /** Boundary in windowSeq, resolved by the main result annotation. */
+  cutSiteInWindow?: number;
   refSeq?: string;
   grnaSeq?: string;
   winSize?: number;

@@ -1,22 +1,25 @@
 # Deployment
 
+CasMango is a standalone static application. Analysis runs locally in the browser without an analysis backend or database.
+
+## GitHub Pages
+
 Live site: **https://jamesk0802.github.io/CasMango/**
 
-The [GitHub Actions workflow](../.github/workflows/deploy.yml) runs on pushes to `main` and can also be started manually from the Actions tab. It installs dependencies, runs tests, builds the app with `/CasMango/` as its base URL and deploys to GitHub Pages.
+The [GitHub Actions workflow](../.github/workflows/deploy.yml) tests and builds pushes to `main` with `/CasMango/` as the base URL, then deploys to GitHub Pages. Set the repository's Pages publishing source to **GitHub Actions**.
 
-In repository **Settings → Pages**, the publishing source must be **GitHub Actions**. Do not commit `node_modules/`, build output or caches.
-
-## Other static hosts
+## RSB rawdata
 
 ```sh
 npm ci
-npm run build
+npm test
+npm run build -- --base-href /pub/rawdata1/CasMANGO/
 ```
 
-Serve `dist/casmango/browser/` using a static web server. For a subdirectory deployment, build with the appropriate prefix, for example:
+Publish the contents of `dist/casmango/browser/` to the `CasMANGO` directory in the RSB rawdata repository. Publish assets before replacing `index.html`, then verify the live page and referenced bundles.
 
-```sh
-npm run build -- --base-href /CasMango/
-```
+Live site: **https://ftp.rsb.anu.edu.au/pub/rawdata1/CasMANGO/**
 
-The app does not require an analysis backend, API credentials or a database. File and folder copying requires a supported browser on HTTPS or localhost.
+For other static hosts, use the corresponding base URL. Do not commit build output, dependencies or caches.
+
+The landing page is at `#/`, analysis at `#/analysis`, results at `#/results`, sequences at `#/sequence-viewer`, and contact at `#/contact`. Hash navigation supports static subdirectory hosts.

@@ -5,6 +5,7 @@ import { FastqDocument } from '../../models/sequence.model';
 import { SequenceWorkspaceService } from '../../services/sequence-workspace.service';
 import { isReadUsable, findGrnaCutSite, extractWindow, cutIndexInWindow, reverseComplement } from '../../workers/core/classifier';
 import { classifyMutationWithAlignment, AlignmentToken } from '../../workers/core/analyzer';
+import { resolveAnnotationCutSite } from '../result-dashboard/annotation-cut-site';
 
 export interface WindowGridCell {
   char: string;
@@ -927,6 +928,7 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
   isAlignedActive = false;
   alignedWindowSeq = '';
   alignedCutSiteInWindow = -1;
+  private windowCutSitePreset?: { windowSeq: string; cutSite: number };
   alignedStats = { total: 0, alignedCount: 0, unalignedCount: 0, percentage: 0 };
   alignmentReadOrder: 'aligned' | 'unaligned' = 'aligned';
 
@@ -963,12 +965,14 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
         this.alignmentReadOrder = 'aligned';
         this.alignedWindowSeq = '';
         this.alignedCutSiteInWindow = -1;
+        this.windowCutSitePreset = undefined;
         const preset = this.document?.alignmentPreset;
         if (preset) {
           this.inputWindowSeq = preset.windowSeq || '';
           this.inputRefSeq = preset.refSeq || '';
           this.inputGrnaSeq = preset.grnaSeq || '';
           this.inputWinSize = preset.winSize || 90;
+          this.setWindowCutSitePreset(preset);
           this.alignMode = 'window';
         }
       }
@@ -1016,7 +1020,10 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
       this.inputRefSeq = pending.refSeq || '';
       this.inputGrnaSeq = pending.grnaSeq || '';
       this.inputWinSize = pending.winSize || 90;
-      if (pending.refSeq && pending.grnaSeq) {
+      this.setWindowCutSitePreset(pending);
+      if (this.windowCutSitePreset) {
+        this.alignMode = 'window';
+      } else if (pending.refSeq && pending.grnaSeq) {
         this.alignMode = 'ref_target';
       } else {
         this.alignMode = 'window';
@@ -1058,15 +1065,24 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     let cutSiteInWin = -1;
 
     if (this.alignMode === 'window') {
-      targetWin = this.inputWindowSeq.trim().toUpperCase();
-      cutSiteInWin = Math.floor(targetWin.length / 2);
+      targetWin = this.inputWindowSeq.replace(/\s+/g, '').toUpperCase();
+      cutSiteInWin = this.windowCutSitePreset?.windowSeq === targetWin
+        ? this.windowCutSitePreset.cutSite
+        : Math.floor(targetWin.length / 2);
     } else {
-      const refSeq = this.inputRefSeq.trim().toUpperCase();
-      const grnaSeq = this.inputGrnaSeq.trim().toUpperCase();
+      const refSeq = this.inputRefSeq.replace(/\s+/g, '').toUpperCase();
+      const grnaSeq = this.inputGrnaSeq.replace(/\s+/g, '').toUpperCase();
       if (!refSeq || !grnaSeq) return;
 
       const cutInfo = findGrnaCutSite(refSeq, grnaSeq);
-      let cutSite = cutInfo.cut_site;
+      let cutSite = resolveAnnotationCutSite({
+        ref_sequence: refSeq,
+        sgrna_seq: grnaSeq,
+        display_sgrna_seq: cutInfo.strand === 'reverse' ? reverseComplement(grnaSeq) : grnaSeq,
+        grna_start_index: cutInfo.grna_start,
+        cut_site_index: cutInfo.cut_site,
+        strand: cutInfo.strand,
+      }) ?? cutInfo.cut_site;
       if (cutSite < 0 || cutSite >= refSeq.length) {
         cutSite = Math.floor(refSeq.length / 2);
       }
@@ -1082,6 +1098,15 @@ export class FastqViewerComponent implements OnInit, OnChanges, AfterViewInit, O
     this.isAlignedActive = true;
 
     this.reprocessAlignment();
+  }
+
+  private setWindowCutSitePreset(config: { windowSeq?: string; cutSiteInWindow?: number }) {
+    const windowSeq = (config.windowSeq || '').replace(/\s+/g, '').toUpperCase();
+    const cut = config.cutSiteInWindow;
+    this.windowCutSitePreset = typeof cut === 'number' && Number.isInteger(cut)
+      && cut >= 0 && cut <= windowSeq.length
+      ? { windowSeq, cutSite: cut }
+      : undefined;
   }
 
   private reprocessAlignment() {
