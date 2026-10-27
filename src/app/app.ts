@@ -14,6 +14,7 @@ import { SequenceWorkspacePageComponent } from "./pages/sequence-workspace-page/
 import { LandingPageComponent } from "./pages/landing-page/landing-page.component";
 import { ContactPageComponent } from "./pages/contact-page/contact-page.component";
 import { VersionNotesPageComponent } from "./pages/version-notes-page/version-notes-page.component";
+import { LATEST_RELEASE } from "./models/release-notes";
 import { Subscription } from "rxjs";
 import { TutorialGuideComponent } from "./components/tutorial-guide/tutorial-guide.component";
 
@@ -132,7 +133,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
           </button>
           <div id="contact-menu" class="contact-dropdown" *ngIf="contactMenuOpen">
-            <button type="button" (click)="showPage('versions')">Version notes <span>v1.0.0</span></button>
+            <button type="button" (click)="showPage('versions')">Version notes <span>v{{ latestRelease.version }}</span></button>
           </div>
           </div>
           <button
@@ -144,7 +145,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
           >
             <span class="guide-btn-text">Guide</span>
           </button>
-          <span class="version-tag">v1.0.0</span>
+          <span class="version-tag">v{{ latestRelease.version }}</span>
         </div>
 
         <span class="mobile-active-section">{{ activeTabLabel }}</span>
@@ -178,7 +179,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
         <div class="drawer-header">
           <img src="casmango-logo.jpg" alt="CasMango" class="drawer-logo" />
           <div class="drawer-header-actions">
-            <span class="version-tag">v1.0.0</span>
+            <span class="version-tag">v{{ latestRelease.version }}</span>
             <button
               type="button"
               class="drawer-close"
@@ -399,6 +400,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
   ],
 })
 export class App implements OnInit, OnDestroy {
+  readonly latestRelease = LATEST_RELEASE;
   page: SitePage = "home";
   activeTab: MainTab = "analysis";
   mobileMenuOpen = false;

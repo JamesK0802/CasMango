@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { LATEST_RELEASE } from '../../models/release-notes';
 
 @Component({
   selector: 'app-version-notes-page', standalone: true,
@@ -6,8 +7,8 @@ import { Component } from '@angular/core';
     <section class="version-notes" aria-labelledby="version-notes-title">
       <h1 id="version-notes-title">Version notes</h1>
       <article>
-        <header><h2>v1.0.0</h2><time datetime="2026-10-27">27 October 2026</time></header>
-        <p>Initial public release.</p>
+        <header><h2>v{{ latestRelease.version }}</h2><time [attr.datetime]="latestRelease.date">{{ latestRelease.displayDate }}</time></header>
+        <p>{{ latestRelease.text }}</p>
       </article>
     </section>
   `,
@@ -23,4 +24,6 @@ import { Component } from '@angular/core';
     @media(max-width: 600px) { .version-notes { padding: 45px 24px; } }
   `],
 })
-export class VersionNotesPageComponent {}
+export class VersionNotesPageComponent {
+  readonly latestRelease = LATEST_RELEASE;
+}
