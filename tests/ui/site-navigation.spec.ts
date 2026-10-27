@@ -92,4 +92,25 @@ describe("CasMango public pages and existing tools", () => {
     state.activeMainTab$.next("workspace");
     expect(location.hash).toBe("#/sequence-viewer");
   });
+  it("opens version notes from the Contact dropdown and restores its deep link", () => {
+    app.contactMenuOpen = true;
+    app.showPage('versions');
+    expect(app.page).toBe('versions');
+    expect(location.hash).toBe('#/version-notes');
+    expect(app.contactMenuOpen).toBe(false);
+    app.showPage('home');
+    location.hash = '#/version-notes';
+    app.readRoute();
+    expect(app.page).toBe('versions');
+    app.showPage('contact');
+    expect(location.hash).toBe('#/contact');
+  });
+  it("closes the Contact dropdown on dismissal and tool navigation", () => {
+    app.contactMenuOpen = true;
+    app.closeContactMenu();
+    expect(app.contactMenuOpen).toBe(false);
+    app.contactMenuOpen = true;
+    app.switchTab('analysis');
+    expect(app.contactMenuOpen).toBe(false);
+  });
 });

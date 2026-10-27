@@ -13,11 +13,12 @@ import { BenchmarkPageComponent } from "./pages/benchmark-page/benchmark-page.co
 import { SequenceWorkspacePageComponent } from "./pages/sequence-workspace-page/sequence-workspace-page.component";
 import { LandingPageComponent } from "./pages/landing-page/landing-page.component";
 import { ContactPageComponent } from "./pages/contact-page/contact-page.component";
+import { VersionNotesPageComponent } from "./pages/version-notes-page/version-notes-page.component";
 import { Subscription } from "rxjs";
 import { TutorialGuideComponent } from "./components/tutorial-guide/tutorial-guide.component";
 
 type MainTab = "analysis" | "viewer" | "benchmark" | "workspace";
-type SitePage = "home" | "tool" | "contact";
+type SitePage = "home" | "tool" | "contact" | "versions";
 const TAB_ROUTES: Record<MainTab, string> = {
   analysis: "/analysis",
   viewer: "/results",
@@ -37,6 +38,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
     TutorialGuideComponent,
     LandingPageComponent,
     ContactPageComponent,
+    VersionNotesPageComponent,
   ],
   template: `
     <div class="app-shell">
@@ -116,6 +118,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
         </div>
 
         <div class="nav-right">
+          <div class="contact-nav-group" (click)="$event.stopPropagation()">
           <button
             type="button"
             class="contact-nav-link"
@@ -125,6 +128,13 @@ const TAB_ROUTES: Record<MainTab, string> = {
           >
             Contact
           </button>
+          <button type="button" class="contact-menu-toggle" aria-label="Contact menu" aria-controls="contact-menu" [attr.aria-expanded]="contactMenuOpen" [disabled]="state.isAnalysisRunning" (click)="contactMenuOpen = !contactMenuOpen">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+          </button>
+          <div id="contact-menu" class="contact-dropdown" *ngIf="contactMenuOpen">
+            <button type="button" (click)="showPage('versions')">Version notes <span>v1.0.0</span></button>
+          </div>
+          </div>
           <button
             type="button"
             class="btn-guide-trigger"
@@ -231,6 +241,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
           >
             Contact
           </button>
+          <button type="button" class="drawer-link" [class.active]="page === 'versions'" [disabled]="state.isAnalysisRunning" (click)="showPage('versions')">Version notes</button>
           <button
             type="button"
             class="drawer-link drawer-guide-btn"
@@ -255,6 +266,7 @@ const TAB_ROUTES: Record<MainTab, string> = {
               *ngIf="page === 'contact'"
               (goHome)="showPage('home')"
             />
+            <app-version-notes-page *ngIf="page === 'versions'" />
           </div>
           <div
             class="crispr-body"
@@ -390,6 +402,7 @@ export class App implements OnInit, OnDestroy {
   page: SitePage = "home";
   activeTab: MainTab = "analysis";
   mobileMenuOpen = false;
+  contactMenuOpen = false;
   isGuideOpen = false;
   guideInitialMode: "hub" | "analysis" | "result" | "workspace" | "benchmark" =
     "hub";
@@ -409,6 +422,7 @@ export class App implements OnInit, OnDestroy {
     this.mobileMenuOpen = false;
   }
   switchTab(tab: MainTab, replace = false) {
+    this.contactMenuOpen = false;
     if (
       this.state.isAnalysisRunning &&
       (tab !== this.activeTab || this.page !== "tool")
@@ -427,7 +441,8 @@ export class App implements OnInit, OnDestroy {
     this.mobileMenuOpen = false;
     this.writeRoute(replace);
   }
-  showPage(page: "home" | "contact", replace = false) {
+  showPage(page: Exclude<SitePage, "tool">, replace = false) {
+    this.contactMenuOpen = false;
     if (this.state.isAnalysisRunning) {
       this.writeRoute(true);
       return;
@@ -444,6 +459,8 @@ export class App implements OnInit, OnDestroy {
         ? "/"
         : this.page === "contact"
           ? "/contact"
+          : this.page === "versions"
+            ? "/version-notes"
           : TAB_ROUTES[this.activeTab]);
     if (window.location.hash !== hash)
       window.history[replace ? "replaceState" : "pushState"](null, "", hash);
@@ -456,10 +473,13 @@ export class App implements OnInit, OnDestroy {
       (tab) => TAB_ROUTES[tab] === route,
     );
     if (tab) this.switchTab(tab, true);
-    else this.showPage(route === "/contact" ? "contact" : "home", true);
+    else this.showPage(route === "/contact" ? "contact" : route === "/version-notes" ? "versions" : "home", true);
   }
+  @HostListener("document:click")
+  @HostListener("window:keydown.escape")
+  closeContactMenu() { this.contactMenuOpen = false; }
   get activeTabLabel(): string {
-    if (this.page !== "tool") return this.page === "home" ? "Home" : "Contact";
+    if (this.page !== "tool") return this.page === "home" ? "Home" : this.page === "versions" ? "Version notes" : "Contact";
     return {
       analysis: "Analysis",
       viewer: "Results",
