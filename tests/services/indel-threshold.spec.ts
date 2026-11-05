@@ -118,16 +118,17 @@ describe('visible Excel vs zero-threshold restoration metadata',()=>{
     expect(target.top_groups).toHaveLength(4); expect(target.summary.aligned_reads).toBe(100); expect(target.unfiltered_top_groups).toBeUndefined();
     expect(scopes).toEqual(before);
   });
-  it('roundtrips with a zero-threshold baseline and allows Curate to change 0 → 20 → 0',async()=>{
+  it('reopens at the saved threshold with a reversible zero-threshold baseline',async()=>{
     const scopes=[{sheetName:'Merged',readFlow:flow,genes:[gene()]},{sheetName:'sample.fq',readFlow:flow,genes:[gene()]}];
     const {service,report}=await readWorkbook({indelThreshold:2},scopes);
     const s=state(); s.loadResultData(await service.importFromExcel(report));
-    expect(s.lastRunParams.indelThreshold).toBe(0); expect(s.genes[0].analysis_result.targets[0].summary.aligned_reads).toBe(100);
+    expect(s.lastRunParams.indelThreshold).toBe(2); expect(s.genes[0].analysis_result.targets[0].summary.aligned_reads).toBe(99);
+    expect(s.genes[0].analysis_result.targets[0].unfiltered_top_groups).toHaveLength(4);
     s.enterCuratedView(); expect(s.thresholdRecoveryComplete).toBe(true);
     s.selectScope = undefined; s.selectedScopeIndex=0;
     s.setCuratedIndelThreshold(20); expect(s.genes[0].analysis_result.targets[0].summary.aligned_reads).toBe(80); expect(s.selectedScopeIndex).toBe(0);
     s.setCuratedIndelThreshold(0); expect(s.genes[0].analysis_result.targets[0].summary.aligned_reads).toBe(100);
-    s.exitCuratedView(); expect(s.genes[0].analysis_result.targets[0].summary.aligned_reads).toBe(100);
+    s.exitCuratedView(); expect(s.genes[0].analysis_result.targets[0].summary.aligned_reads).toBe(99);
   });
   it('marks old filtered reports incomplete, preserves available reads, and does not invent rare groups',async()=>{
     const legacy=applyIndelThreshold(rawTarget(),2); delete legacy.unfiltered_top_groups; delete legacy.threshold_data_complete;
@@ -156,4 +157,11 @@ describe('visible Excel vs zero-threshold restoration metadata',()=>{
     expect(metadata.params.indelThreshold).toBe(0); expect(metadata.params.thresholdRecoveryComplete).toBe(false);
     expect(metadata.scopes[0].genes[0].analysis_result.targets[0].top_groups).toHaveLength(3);
   });
+});
+
+it('restores a curated exported threshold, preserves manual removals and recovers threshold-hidden groups after reload',async()=>{
+ const original=state();original.handleAnalysisComplete({results:[file()]});original.enterCuratedView();original.toggleGroupExclusion('7A','t1','SEQ1');original.setCuratedIndelThreshold(20);
+ const exported=original.getExportData(),{service,report}=await readWorkbook(exported.params,exported.scopes,original.curationConfig),reopened=state();reopened.loadResultData(await service.importFromExcel(report));
+ expect(reopened.lastRunParams.indelThreshold).toBe(20);expect(reopened.genes[0].analysis_result.targets[0].summary.aligned_reads).toBe(80);reopened.enterCuratedView();expect(reopened.curationConfig.indelThreshold).toBe(20);
+ reopened.setCuratedIndelThreshold(0);const target=reopened.genes[0].analysis_result.targets[0];expect(target.summary.aligned_reads).toBe(85);expect(target.top_groups.map((g:any)=>g.read_inner)).toEqual(['SEQ0','SEQ2','SEQ3']);
 });

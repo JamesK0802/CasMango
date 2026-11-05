@@ -1,6 +1,6 @@
 import { Injectable, NgZone } from '@angular/core';
 import { findMergeTarget } from '../models/result-merge';
-import { mergeThresholdBaselines, sanitizeIndelThreshold } from '../models/indel-threshold';
+import { mergeThresholdBaselines, sanitizeIndelThreshold, restoreReportThreshold } from '../models/indel-threshold';
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
 import { BehaviorSubject, Subject, Subscription } from 'rxjs';
 import { ExcelExportService, ExportParams } from './excel-export.service';
@@ -744,6 +744,7 @@ export class AppStateService {
   }
 
   loadResultData(data: { params: any, scopes: any[], curationConfig?: CurationConfig | null }) {
+    data = restoreReportThreshold(data);
     this.ngZone.run(() => {
       this.lastRunParams = data.params;
       this.allFileResults = [];
@@ -763,6 +764,7 @@ export class AppStateService {
       for (const scope of fileScopes) {
         this.allFileResults.push({
           fastq_file: scope.sheetName,
+          ...(scope.guideFigureSelections?{guideFigureSelections:scope.guideFigureSelections}:{}),
           multi_reference_result: {
             debug: {
               total_reads_parsed: scope.readFlow.rawReads,

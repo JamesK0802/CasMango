@@ -71,3 +71,14 @@ export function mergeThresholdBaselines(existing: TargetResult, incoming: Target
   existing.unfiltered_top_groups = groups.map((g, i) => ({ ...g, group_rank: i + 1, read_pct: total ? Math.round(g.read_count * 10000 / total) / 100 : 0 }));
   existing.threshold_data_complete = existing.threshold_data_complete === true && incoming.threshold_data_complete === true;
 }
+
+/** Reopen the saved view at its chosen threshold while retaining the zero-
+ * threshold evidence for future curation. Never reapply manual exclusions. */
+export function restoreReportThreshold<T extends {params:any;scopes:any[]}>(data:T):T {
+  const saved=data.params?.exportedIndelThreshold;
+  if(typeof saved!=='number'||!Number.isFinite(saved)||data.params.indelThreshold!==0)return data;
+  const threshold=sanitizeIndelThreshold(saved);
+  return {...data,params:{...data.params,indelThreshold:threshold},scopes:data.scopes.map(scope=>({...scope,
+    genes:scope.genes?.map((gene:any)=>({...gene,analysis_result:{...gene.analysis_result,targets:gene.analysis_result.targets.map((target:TargetResult)=>
+      target.top_groups||target.unfiltered_top_groups?applyIndelThreshold(target,threshold):target)}}))}))};
+}

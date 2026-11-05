@@ -52,6 +52,21 @@ export class ResultDashboardComponent implements OnInit, OnDestroy {
     }
     return this.presentationCache.projected;
   }
+  private figureReplicateCache?: {files:any[];key:string;rows:{sample:string;genes:GeneResult[]}[]};
+  get figureReplicateFiles() {
+    const files=this.state.allFileResults,key=JSON.stringify([this.state.isCuratedView,this.state.isCuratedView?this.state.curationConfig:null,files.map(file=>file.fastq_file)]);
+    if(this.figureReplicateCache?.files===files&&this.figureReplicateCache.key===key)return this.figureReplicateCache.rows;
+    const rows=files.filter(file=>!this.state.isCuratedView||!this.isFileExcluded(file)).map(file=>({sample:this.extractFileName(file.fastq_file),genes:withoutExcludedGroups((file.multi_reference_result?.genes||[]).filter((g:GeneResult)=>!g.is_ambiguous_derived&&!g.is_rescued_derived),this.state.isCuratedView?this.state.curationConfig?.excludedGroups:[]).map(gene=>({...gene,analysis_result:{...gene.analysis_result,targets:gene.analysis_result.targets.map(target=>{const saved=!this.state.isCuratedView?file.guideFigureSelections?.[JSON.stringify([gene.gene,target.target_id])]:undefined;return saved?{...target,top_groups:(target.unfiltered_top_groups??target.top_groups??[]).filter(group=>saved.sequences.includes(group.read_inner)),guideReportGroups:saved.sequences,guideReportError:saved.error}:target;})}}))}));
+    this.figureReplicateCache={files,key,rows};return rows;
+  }
+  get figureScopeKey() {return this.state.selectedScopeIndex===-1?'merged':this.extractFileName(this.state.allFileResults[this.state.selectedScopeIndex]?.fastq_file||'');}
+  get figureCurationRevision() {return this.state.isCuratedView?JSON.stringify(this.state.curationConfig):'';}
+  private figureMergedCache?:{genes:GeneResult[];key:string;rows:GeneResult[]};
+  get figureMergedGenes() {
+    const genes=this.state.mergedGenes,excluded=this.state.isCuratedView?this.state.curationConfig?.excludedGroups??[]:[],key=JSON.stringify(excluded);
+    if(this.figureMergedCache?.genes!==genes||this.figureMergedCache.key!==key)this.figureMergedCache={genes,key,rows:withoutExcludedGroups(genes.filter(g=>!g.is_ambiguous_derived&&!g.is_rescued_derived),excluded)};
+    return this.figureMergedCache.rows;
+  }
   get workspacePanes(): string[] { return ['standard', ...(this.showHomoeolog ? ['homoeolog'] : [])]; }
   get scopeLabel(): string {
     const file = this.state.allFileResults[this.state.selectedScopeIndex];

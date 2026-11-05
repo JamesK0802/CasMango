@@ -1,3 +1,4 @@
+import {renderGuideAnnotation, guideAnnotationSpan, GuideReplicate} from './guide-group-annotation';
 import { GeneResult, TargetResult } from '../../models/analysis.model';
 import { resolveAnnotationCutSite } from './annotation-cut-site';
 import { groupKey } from '../../models/curation.model';
@@ -15,6 +16,7 @@ export function withoutExcludedGroups(genes: GeneResult[], exclusions: readonly 
 /** Presentation-only projections. Never mutate results or infer joint genotypes. */
 export interface ComparisonRow {
   name: string;
+  guideReplicates?: GuideReplicate[];
   target?: TargetResult;
   reads: number;
   wt: number | null;
@@ -109,12 +111,13 @@ export function homeologCombination(rows: ComparisonRow[], metric: CoeditingMetr
     all: distribution[distribution.length - 1] * 100, any: (1 - distribution[0]) * 100,
     distribution: distribution.map((p, count) => ({ count, percent: p * 100 })) };
 }
-export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary' | 'coediting';
-export interface FigurePanel { id: number; kind: FigureKind; title: string; source: FigureSource; coeditingMetric?: CoeditingMetric; coeditingSubsets?: readonly string[][]; }
+export type FigureKind = 'profile' | 'editing' | 'alleles' | 'summary' | 'coediting' | 'guide-alleles';
+export interface FigureBinding {scope:string;references:string[];target:string;samples?:string[];rowLabel?:string;label:string}
+export interface FigurePanel { binding?:FigureBinding; id: number; kind: FigureKind; title: string; source: FigureSource; coeditingMetric?: CoeditingMetric; coeditingSubsets?: readonly string[][]; }
 function figureCoeditingSubsets(panel: FigurePanel): CoeditingSubset[] {
   return (panel.coeditingSubsets ?? []).map(names=>homeologSubset(panel.source.rows,panel.coeditingMetric ?? ['inFrame','outOfFrame'],names)).filter((item):item is CoeditingSubset=>!!item);
 }
-export interface FigureOptions { title: string; columns: number; layout?: string; fontSize: number; radius: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }
+export interface FigureOptions { title: string; columns: number; layout?: string; fontSize: number; radius: number; sequenceBases?: number; guideSequenceBases?: number; guideGroupLimit?: number; groupLimit: number; minFrequency: number; palette: 'okabe' | 'muted'; }
 
 export function figureRows(count: number, options: Pick<FigureOptions, 'columns' | 'layout'>): number[] {
   const n = Math.max(0, Math.min(12, Math.floor(count)));
@@ -147,6 +150,7 @@ export function captureFigureSource(label: string, rows: ComparisonRow[]): Figur
   // A figure needs grouped outcomes and sequences, never one object per read.
   // Keep large Nanopore datasets out of each independent panel snapshot.
   return structuredClone({ label, rows: rows.map(row => ({ ...row,
+    ...(row.guideReplicates?{guideReplicates:row.guideReplicates.map(rep=>({...rep,target:{...rep.target,read_details:[],unfiltered_top_groups:undefined}}))}:{}),
     target: row.target ? { ...row.target, read_details: [], unfiltered_top_groups: undefined } : undefined })) });
 }
 export function moveFigurePanel(panels: FigurePanel[], from: number, to: number): FigurePanel[] {
@@ -159,20 +163,27 @@ export function escapeSvg(value: unknown): string {
 const fmt = (value: number | null) => value === null ? 'N/A' : `${value.toFixed(1)}%`;
 const short = (value: string, n: number) => value.length > n ? value.slice(0, n - 1) + '…' : value;
 
-/** Reference coordinates consume all tokens except insertions; X is not an edit. */
-export function sequenceCells(target: TargetResult, groupIndex: number, radius: number): { text: string; type: string }[] {
-  const cut = resolveAnnotationCutSite(target);
-  if (cut === null) return [];
-  const start = Math.max(0, cut - radius), end = Math.min(target.ref_sequence?.length ?? cut + radius, cut + radius);
-  const cells: { text: string; type: string }[] = [];
-  let position = 0;
-  for (const token of target.top_groups?.[groupIndex]?.tokens ?? []) {
-    if (token.type === 'insert') {
-      if (position >= start && position < end) cells.push({ text: `+${short(token.val, 8)}`, type: 'insert' });
+/** Annotation length counts reference bases and never extends the analysed window. */
+export function figureSequenceBounds(target: TargetResult, requested: number): {start:number;end:number} | null {
+  const cut=resolveAnnotationCutSite(target), available=target.ref_sequence?.length ?? 0;
+  if(cut===null||!available)return null;
+  const length=Math.min(available,Math.max(1,Math.round(Number.isFinite(requested)?requested:60)));
+  const start=Math.max(0,Math.min(available-length,cut-Math.floor(length/2)));
+  return {start,end:start+length};
+}
+/** Insertions consume displayed cells, but never reference coordinates. */
+export function sequenceCells(target: TargetResult, groupIndex: number, radius: number, sequenceBases=2*radius): { text: string; type: string }[] {
+  const bounds=figureSequenceBounds(target,sequenceBases);if(!bounds)return [];
+  const {start,end}=bounds,cells:{text:string;type:string}[]=[];
+  let position=0;
+  for(const token of target.top_groups?.[groupIndex]?.tokens ?? []) {
+    if(token.type==='insert') {
+      if(position>=start&&(position<end||position===end&&end===target.ref_sequence!.length))
+        for(const base of token.val)cells.push({text:base,type:'insert'});
       continue;
     }
-    for (const base of token.val) {
-      if (position >= start && position < end) cells.push({ text: token.type === 'delete' ? '−' : base, type: token.type });
+    for(const base of token.val) {
+      if(position>=start&&position<end)cells.push({text:token.type==='delete'?'-':base,type:token.type});
       position++;
     }
   }
@@ -182,13 +193,13 @@ export function sequenceCells(target: TargetResult, groupIndex: number, radius: 
 export interface FigureSlot { index: number; row: number; col: number; span: number; x: number; y: number; width: number; height: number; }
 export function figurePanelLayout(panels: FigurePanel[], options: FigureOptions): { width: number; height: number; slots: FigureSlot[] } {
   const gap = 24, margin = 28;
-  const panelHeight = (panel: FigurePanel) => panel.kind === 'coediting' ? 156 + (panel.source.rows.length + 1 + figureCoeditingSubsets(panel).length) * 34 : panel.kind === 'alleles'
+  const panelHeight = (panel: FigurePanel, panelWidth=700) => panel.kind === 'guide-alleles' ? renderGuideAnnotation(panel.source.rows,panelWidth-40,Math.max(10,Math.min(options.fontSize,panelWidth/30)),options.guideSequenceBases ?? guideAnnotationSpan(panel.source.rows),options.guideGroupLimit ?? 12).height : panel.kind === 'coediting' ? 156 + (panel.source.rows.length + 1 + figureCoeditingSubsets(panel).length) * 34 : panel.kind === 'alleles'
     ? 90 + panel.source.rows.reduce((height, row) => height + 56 + Math.min(options.groupLimit, (row.target?.top_groups ?? []).filter(g => g.read_pct >= options.minFrequency).length) * 30, 0)
     : 112 + panel.source.rows.length * (panel.kind === 'summary' ? 38 : 56);
   const rows = figureRows(panels.length, options);
   const fixed = options.layout?.startsWith('columns:') ? Number(options.layout.slice(8)) : !options.layout ? options.columns : 0;
   const fixedColumns = fixed >= 1 && fixed <= 4 ? fixed : 0;
-  if (!panels.some(panel => panel.kind === 'alleles')) {
+  if (!panels.some(panel => (panel.kind === 'alleles' || panel.kind === 'guide-alleles'))) {
     const width = Math.max(...rows, fixedColumns || 1) > 1 ? 1440 : 780;
     const slots: FigureSlot[] = []; let index = 0, y = 108;
     for (const [row, count] of rows.entries()) {
@@ -199,16 +210,16 @@ export function figurePanelLayout(panels: FigurePanel[], options: FigureOptions)
     }
     return { width, height: y + 28 - (slots.length ? gap : 0), slots };
   }
-  const cells = panels.reduce((sum, panel) => sum + (panel.kind === 'alleles' ? 2 : 1), 0);
+  const cells = panels.reduce((sum, panel) => sum + ((panel.kind === 'alleles' || panel.kind === 'guide-alleles') ? 2 : 1), 0);
   const requested = options.layout?.startsWith('rows:') ? options.layout.slice(5).split('+').map(Number) : [];
   const rowPattern = requested.every(n => Number.isInteger(n) && n >= 1 && n <= 4) && requested.reduce((a,b) => a+b,0) === cells ? requested : [];
-  const columns = fixedColumns || (rowPattern.length ? Math.max(...rowPattern) : Math.min(panels.length, cells > 12 ? 4 : Math.max(...figureRows(cells, { columns: 0, layout: 'auto' }))));
+  const columns = fixedColumns || (rowPattern.length ? Math.max(...rowPattern) : panels.every(panel=>panel.kind==='guide-alleles') ? Math.min(2,panels.length) : Math.min(panels.length, cells > 12 ? 4 : Math.max(...figureRows(cells, { columns: 0, layout: 'auto' }))));
   const width = columns > 1 ? 1440 : 780, panelWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
-  const cellHeight = Math.max(180, ...panels.map(panel => panel.kind === 'alleles' ? (panelHeight(panel) - gap) / 2 : panelHeight(panel)));
+  const cellHeight = Math.max(180, ...panels.map(panel => (panel.kind === 'alleles' || panel.kind === 'guide-alleles') ? (panelHeight(panel,panelWidth) - gap) / 2 : panelHeight(panel,panelWidth)));
   const occupied = new Set<string>(), slots: FigureSlot[] = [];
   const capacity = (row: number) => rowPattern[row] ?? columns;
   panels.forEach((panel, index) => {
-    const span = panel.kind === 'alleles' ? 2 : 1;
+    const span = (panel.kind === 'alleles' || panel.kind === 'guide-alleles') ? 2 : 1;
     for (let row = 0; ; row++) {
       let placed = false;
       for (let col = 0; col < columns; col++) {
@@ -234,7 +245,7 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
   const width = layout.width, margin = 28;
   const font = options.fontSize;
   const text = (x: number, y: number, content: unknown, size = font, extra = '') => `<text x="${x}" y="${y}" font-size="${size}" ${extra}>${escapeSvg(content)}</text>`;
-  const legend = colors.map((color, i) => `<rect x="${margin + i * 155}" y="65" width="11" height="11" fill="${color}"/>${text(margin + 17 + i * 155, 75, ['WT', 'Substitution', 'In-frame indel', 'Out-of-frame indel'][i], 12)}`).join('');
+  const legend = panels.length && panels.every(p=>p.kind==='guide-alleles') ? text(margin,75,'gRNA groups · insertions/deletions: red · substitutions: blue + underline',12,'fill="#64748b"') : colors.map((color, i) => `<rect x="${margin + i * 155}" y="65" width="11" height="11" fill="${color}"/>${text(margin + 17 + i * 155, 75, ['WT', 'Substitution', 'In-frame indel', 'Out-of-frame indel'][i], 12)}`).join('');
   let body = '';
   panels.forEach((panel, index) => {
     const {row,col,x,y,width:panelWidth,span} = layout.slots[index];
@@ -290,32 +301,32 @@ export function renderFigure(panels: FigurePanel[], input: FigureOptions): strin
         [short(row.name, Math.min(18,Math.floor(inner * .26 / (font * .65)))), row.reads, fmt(row.wt), fmt(row.inFrame), fmt(row.outOfFrame)].forEach((v, j) => body += text(columns[j], top, v, font));
         body += `<path d="M0 ${top + 12}H${inner}" stroke="#e2e8f0"/>`;
       });
+    } else if (panel.kind === 'guide-alleles') {
+      body += renderGuideAnnotation(panel.source.rows,inner,font,options.guideSequenceBases ?? guideAnnotationSpan(panel.source.rows),options.guideGroupLimit ?? 12).svg;
     } else {
       let top = 72;
       for (const row of panel.source.rows) {
         body += text(0, top, row.name, font, 'font-weight="700"'); top += 24;
         const target = row.target, cut = resolveAnnotationCutSite(target);
         if (!target || cut === null || !target.ref_sequence) { body += text(0, top, 'Sequence / cut-site unavailable', 12, 'fill="#64748b"'); top += 32; continue; }
-        const start = Math.max(0, cut - options.radius), end = Math.min(target.ref_sequence.length, cut + options.radius);
-        const seqX = 145, baseWidth = (inner - seqX) / Math.max(1, end - start);
-        const seqSize = Math.min(12, baseWidth * 1.1);
-        const sequence = (bases: { text: string; type: string }[], at: number) => {
-          // Insertions have a separate marker at their reference coordinate.
-          let pos = 0;
-          for (const cell of bases) {
-            const xx = seqX + pos * baseWidth;
-            if (cell.type === 'insert') { body += text(xx, at - 9, cell.text, 8, `fill="${colors[2]}"`); continue; }
-            if (cell.type === 'delete' || cell.type === 'substitute') body += `<rect x="${xx - 1}" y="${at - 11}" width="${baseWidth}" height="15" fill="${cell.type === 'delete' ? '#fde8d7' : '#f6edb8'}"/>`;
-            body += text(xx, at, cell.text, seqSize, `font-family="monospace" fill="${cell.type === 'unobserved' ? '#94a3b8' : '#334155'}"`); pos++;
-          }
+        const {start,end}=figureSequenceBounds(target,options.sequenceBases ?? 2*options.radius)!;
+        const selected=(target.top_groups ?? []).map((g,i)=>({g,i})).filter(({g})=>g.read_pct>=options.minFrequency).slice(0,options.groupLimit);
+        const groups=selected.map(({g,i})=>({g,cells:sequenceCells(target,i,options.radius,options.sequenceBases)}));
+        const reference=[...target.ref_sequence.slice(start,end)].map(base=>({text:base,type:'equal'}));
+        const seqX=145,baseWidth=(inner-seqX)/Math.max(1,reference.length,...groups.map(g=>g.cells.length));
+        const seqSize=Math.min(12,baseWidth/0.65);
+        const sequence=(cells:{text:string;type:string}[],at:number)=>{
+          cells.forEach((cell,pos)=>{
+            const xx=seqX+(pos+.5)*baseWidth;
+            const color=cell.type==='substitute'?'#2563eb':cell.type==='insert'||cell.type==='delete'?'#dc2626':cell.type==='unobserved'?'#94a3b8':'#334155';
+            body+=text(xx,at,cell.text,seqSize,`data-annotation-base="${escapeSvg(cell.type)}" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" fill="${color}"`);
+            if(cell.type==='substitute')body+=`<path data-annotation-underline="substitute" d="M${xx-baseWidth*.36} ${at+3}h${baseWidth*.72}" stroke="#2563eb" stroke-width="1"/>`;
+          });
         };
-        body += text(0, top, 'Reference', 11);
-        sequence([...target.ref_sequence.slice(start, end)].map(base => ({ text: base, type: 'equal' })), top);
-        const selected = (target.top_groups ?? []).map((g, i) => ({ g, i })).filter(({g}) => g.read_pct >= options.minFrequency).slice(0, options.groupLimit);
-        body += `<path d="M${seqX + (cut - start) * baseWidth} ${top - 15}v${selected.length * 30 + 18}" stroke="#CC79A7" stroke-dasharray="3 3"/>`;
-        for (const { g, i } of selected) {
-          top += 30; body += text(0, top, `${g.net_indel > 0 ? '+' : ''}${g.net_indel} bp · ${g.read_pct.toFixed(1)}%`, 11);
-          sequence(sequenceCells(target, i, options.radius), top);
+        body+=text(0,top,'Reference',11);sequence(reference,top);
+        for(const {g,cells} of groups){
+          top+=30;body+=text(0,top,`${g.net_indel>0?'+':''}${g.net_indel} bp · ${g.read_pct.toFixed(1)}%`,11);
+          sequence(cells,top);
         }
         if (!selected.length) { top += 25; body += text(0, top, 'No groups above display threshold', 11, 'fill="#64748b"'); }
         top += 32;

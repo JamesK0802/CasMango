@@ -1,3 +1,4 @@
+import {GuideFile,guideReplicateRows,replicateLabel,guideAnnotationSpan} from './guide-group-annotation';
 import { Component, Input, Output, EventEmitter, OnChanges, ChangeDetectorRef } from '@angular/core';
 import { GeneResult } from '../../models/analysis.model';
 import { CommonModule } from '@angular/common';
@@ -17,23 +18,24 @@ import { CoeditingSubsetsComponent } from './coediting-subsets.component';
         <label>Source<select aria-label="Figure source" [(ngModel)]="sourceChoice" (ngModelChange)="chooseSource()">
           <option value="">Choose a source</option>
           <option *ngFor="let gene of genes" [value]="'ref:' + gene.gene">{{ gene.gene }}</option>
-          <option value="homeo">Homeolog combination</option>
+          <option value="homeo">Homeolog combination</option><option *ngIf="kind === 'guide-alleles' && replicateFiles.length" value="replicates">Replicate groups</option>
         </select></label>
         <label>Target<select aria-label="Figure target" [(ngModel)]="targetChoice" (ngModelChange)="chooseSource()">
           <option *ngFor="let target of targetChoices" [value]="target">{{ target }}</option>
         </select></label>
-        <div *ngIf="sourceChoice === 'homeo'" class="reference-picker">
+        <div *ngIf="sourceChoice === 'homeo' || sourceChoice === 'replicates'" class="reference-picker">
           <button type="button" *ngFor="let gene of genes" [attr.aria-pressed]="selectedRefs.includes(gene.gene)" (click)="toggleReference(gene.gene)">{{ selectedRefs.includes(gene.gene) ? '✓ ' : '' }}{{ gene.gene }}</button>
         </div>
       </div>
+      <details *ngIf="sourceChoice === 'replicates' && kind === 'guide-alleles'"><summary>Replicate labels · review filename grouping</summary><p><small>Samples with the same label are equally weighted replicates. Edit inferred labels before adding the panel.</small></p><label *ngFor="let file of replicateFiles">{{file.sample}}<input [ngModel]="replicateLabels[file.sample] || defaultReplicateLabel(file.sample)" (ngModelChange)="replicateLabels[file.sample] = $event" aria-label="Replicate group label"></label></details>
       <div class="source-line">{{ selectedSource.label || 'Choose a source' }}</div>
       <app-coediting-basis *ngIf="sourceChoice === 'homeo' && (kind === 'coediting' || kind === 'all')" [selected]="coeditingMetric" (selectedChange)="coeditingMetric = $event; coeditingMetricChange.emit($event)" />
       <app-coediting-subsets *ngIf="sourceChoice === 'homeo' && (kind === 'coediting' || kind === 'all') && coeditingMetric.length" [rows]="selectedSource.rows" [categories]="coeditingMetric" [selected]="coeditingSubsets" (selectedChange)="coeditingSubsets = $event; coeditingSubsetsChange.emit($event)" />
       <div class="add-row">
         <label class="sr-only" [for]="origin + '-figure-kind'">Panel type</label>
-        <select [id]="origin + '-figure-kind'" [(ngModel)]="kind">
+        <select [id]="origin + '-figure-kind'" [(ngModel)]="kind" (ngModelChange)="kindChanged()">
           <option value="profile">Mutation profile</option><option value="editing">Non-WT reads</option>
-          <option value="alleles">Cut-site sequences</option><option value="summary">Summary table</option>
+          <option value="alleles">Cut-site sequences</option><option value="guide-alleles">gRNA group annotation</option><option value="summary">Summary table</option>
           <option *ngIf="sourceChoice === 'homeo'" value="coediting">Co-editing model</option>
           <option value="all">{{ sourceChoice === 'homeo' ? 'All 5' : 'All 4' }}</option>
         </select>
@@ -46,11 +48,11 @@ import { CoeditingSubsetsComponent } from './coediting-subsets.component';
           <label>Layout<select aria-label="Figure layout" [(ngModel)]="options.layout" (ngModelChange)="refresh()"><option value="auto">Auto{{ autoRows ? ' · ' + autoRows : '' }}</option><option *ngFor="let count of [1,2,3,4]" [value]="'columns:' + count">{{ count }} {{ count === 1 ? 'column' : 'columns' }}</option><option *ngFor="let layout of rowChoices" [value]="layout">{{ layout.slice(5) }}</option></select></label>
           <label>Text size<input type="number" min="10" max="22" [(ngModel)]="options.fontSize" (change)="refresh()"></label>
           <label>Palette<select [(ngModel)]="options.palette" (ngModelChange)="refresh()"><option value="okabe">Okabe–Ito</option><option value="muted">Muted</option></select></label>
-          <label>Sequence flank (bp)<input type="number" min="10" max="60" [(ngModel)]="options.radius" (change)="refresh()"></label>
-          <label>Groups / reference<input type="number" min="1" max="12" [(ngModel)]="options.groupLimit" (change)="refresh()"></label>
+          <label>Annotation span (bp)<input aria-label="Annotation span (bp)" type="number" min="1" [max]="maxAnnotationBases" step="1" [ngModel]="annotationBases" (ngModelChange)="setAnnotationBases($event)"></label>
+          <label>{{kind==='guide-alleles'?'gRNA groups / construct':'Groups / reference'}}<input type="number" min="1" [max]="kind==='guide-alleles'?100:12" [ngModel]="kind==='guide-alleles'?(options.guideGroupLimit??12):options.groupLimit" (ngModelChange)="setGroupLimit($event)"></label>
           <label>Display ≥ (%)<input type="number" min="0" max="100" step="0.5" [(ngModel)]="options.minFrequency" (change)="refresh()"></label>
         </div>
-        <small>Display filters never recalculate read percentages. Grey sequence = unobserved; not a deletion.</small>
+        <small>Existing figures keep their read percentages. gRNA annotation re-groups retained counts inside the guide and normalizes each replicate to 100%; Display ≥ does not remove its low-mean groups. Grey = unobserved.</small>
       </details>
       <div class="panel-list" *ngIf="panels.length">
         <div class="panel-item" *ngFor="let panel of panels; let i = index" draggable="true"
@@ -108,6 +110,17 @@ export class FigureComposerComponent implements OnChanges {
   @Input() origin: 'standard' | 'homoeolog' = 'standard';
   @Input() source: FigureSource = { label: '', rows: [] };
   @Input() genes: GeneResult[] = [];
+  @Input() replicateFiles: GuideFile[] = [];
+  @Input() mergedGenes?: GeneResult[];
+  @Input() scopeKey = 'merged';
+  @Input() curationRevision = '';
+  private lastCurationRevision?: string;
+  replicateLabels:Record<string,string> = {};
+  defaultReplicateLabel = replicateLabel;
+  kindChanged() {
+    if(this.kind==='guide-alleles' && this.replicateFiles.length) { if(!this.selectedRefs.length)this.selectedRefs=this.genes.map(g=>g.gene);this.sourceChosen=true; this.sourceChoice='replicates'; }
+    else if(this.sourceChoice==='replicates')this.sourceChoice=this.genes.length?'ref:'+this.genes[0].gene:'';
+  }
   @Input() active = false;
   @Input() previewOnly = false;
   @Input() coeditingMetric: CoeditingMetric = ['inFrame', 'outOfFrame'];
@@ -128,6 +141,7 @@ export class FigureComposerComponent implements OnChanges {
   get targetChoices(): string[] { return [...new Set(this.genes.flatMap(g => g.analysis_result.targets.map(t => t.target_id)))]; }
   get selectedSource(): FigureSource {
     if (!this.sourceChosen) return this.source;
+    if(this.sourceChoice==='replicates' && this.kind==='guide-alleles')return {label:'Replicate groups · '+this.targetChoice,rows:guideReplicateRows(this.replicateFiles,this.targetChoice,this.replicateLabels,this.selectedRefs)};
     const names = this.sourceChoice === 'homeo' ? this.selectedRefs : [this.sourceChoice.slice(4)];
     return { label: names.join(' + ') + ' · ' + this.targetChoice, rows: comparisonRows(this.genes, names, this.targetChoice) };
   }
@@ -140,12 +154,24 @@ export class FigureComposerComponent implements OnChanges {
     this.selectedRefs = this.selectedRefs.includes(name) ? this.selectedRefs.filter(n => n !== name) : [...this.selectedRefs, name];
     this.chooseSource();
   }
-  get panelCells() { return this.panels.reduce((sum, panel) => sum + (panel.kind === 'alleles' ? 2 : 1), 0); }
-  get autoRows() { return this.panels.some(panel => panel.kind === 'alleles') ? '' : figureRows(this.panels.length,{columns:0}).join('+'); }
+  get maxAnnotationBases() {
+    const annotationPanels=this.panels.filter(p=>(p.kind==='alleles'||p.kind==='guide-alleles'));
+    const rows=annotationPanels.length?annotationPanels.flatMap(p=>p.source.rows):this.selectedSource.rows;
+    const lengths=rows.map(row=>row.target?.ref_sequence?.length ?? 0).filter(n=>n>0);
+    return lengths.length?Math.min(...lengths):120;
+  }
+  get annotationBases() { return Math.min(this.maxAnnotationBases,Math.max(1,Math.round(this.kind==='guide-alleles'?(this.options.guideSequenceBases??guideAnnotationSpan(this.selectedSource.rows)):(this.options.sequenceBases ?? 2*this.options.radius)))); }
+  setAnnotationBases(value:unknown) {
+    const n=Number(value);this.options[this.kind==='guide-alleles'?'guideSequenceBases':'sequenceBases']=Number.isFinite(n)&&n>=1?Math.min(this.maxAnnotationBases,Math.round(n)):Math.min(60,this.maxAnnotationBases);
+    this.refresh();
+  }
+  setGroupLimit(value:unknown) { const n=Number(value),guide=this.kind==='guide-alleles';this.options[guide?'guideGroupLimit':'groupLimit']=Number.isFinite(n)?Math.min(guide?100:12,Math.max(1,Math.floor(n))):guide?12:5;this.refresh(); }
+  get panelCells() { return this.panels.reduce((sum, panel) => sum + ((panel.kind === 'alleles'||panel.kind === 'guide-alleles') ? 2 : 1), 0); }
+  get autoRows() { return this.panels.some(panel => (panel.kind === 'alleles'||panel.kind === 'guide-alleles')) ? '' : figureRows(this.panels.length,{columns:0}).join('+'); }
   get rowChoices() { return figureRowChoices(this.panelCells); }
   previewLayout = figurePanelLayout([], {title:'', columns:0, fontSize:14, radius:30, groupLimit:5, minFrequency:2, palette:'okabe'});
   private get requestedKinds(): FigureKind[] { return this.kind === 'all' ? ['profile','editing','alleles','summary', ...(this.sourceChoice === 'homeo' ? ['coediting' as const] : [])] : [this.kind]; }
-  get canAddPanels() { return this.selectedSource.rows.length > 0 && this.panels.length + this.requestedKinds.length <= 12 && (!this.requestedKinds.includes('coediting') || (this.selectedSource.rows.length >= 2 && this.coeditingMetric.length > 0)); }
+  get canAddPanels() { return this.selectedSource.rows.length > 0 && this.panels.length + (this.kind==='guide-alleles'?this.selectedSource.rows.length:this.requestedKinds.length) <= 12 && (!this.requestedKinds.includes('coediting') || (this.selectedSource.rows.length >= 2 && this.coeditingMetric.length > 0)); }
   panels: FigurePanel[] = [];
   kind: FigureKind | 'all' = 'profile';
   options: FigureOptions = { title: 'Editing outcomes', columns: 0, layout: 'auto', fontSize: 14, radius: 30, groupLimit: 5, minFrequency: 2, palette: 'okabe' };
@@ -165,13 +191,34 @@ export class FigureComposerComponent implements OnChanges {
       this.initialized = true;
       this.sourceChosen = true;
     }
+    if(this.lastCurationRevision===undefined)this.lastCurationRevision=this.curationRevision;
+    else if(this.lastCurationRevision!==this.curationRevision){this.lastCurationRevision=this.curationRevision;this.refreshCuratedPanels();}
   }
+  refreshCuratedPanels() {
+    let changed=false;
+    this.panels=this.panels.map(panel=>{
+      const binding=panel.binding;if(!binding)return panel;
+      let rows:FigureSource['rows'];
+      if(binding.samples){
+        const files=this.replicateFiles.filter(file=>binding.samples!.includes(file.sample)),labels=Object.fromEntries(files.map(file=>[file.sample,binding.rowLabel||'Replicates']));
+        rows=guideReplicateRows(files,binding.target,labels,binding.references);
+      }else{
+        const genes=binding.scope==='merged'?(this.mergedGenes??this.genes):this.replicateFiles.find(file=>file.sample===binding.scope)?.genes??[];
+        rows=comparisonRows(genes,binding.references,binding.target);
+      }
+      const label=binding.label.replace(/ · Curated/g,'')+(this.curationRevision?' · Curated':'');
+      changed=true;return {...panel,source:captureFigureSource(label,rows)};
+    });
+    if(changed)this.refresh();
+  }
+  private binding(source:FigureSource) {return {scope:this.scopeKey,references:source.rows.map(row=>row.name),target:source.rows[0]?.target?.target_id||this.targetChoice,label:source.label};}
   letter(i: number) { return String.fromCharCode(97 + i); }
   addPanel() {
     if (!this.canAddPanels) return;
-    const titles = { profile: 'Mutation profile', editing: 'Non-WT reads', alleles: 'Cut-site sequences', summary: 'Read summary', coediting: 'Co-editing model' };
+    const titles = { profile: 'Mutation profile', editing: 'Non-WT reads', alleles: 'Cut-site sequences', 'guide-alleles':'gRNA group annotation', summary: 'Read summary', coediting: 'Co-editing model' };
     const source = this.selectedSource;
-    this.panels = [...this.panels, ...this.requestedKinds.map(kind => ({ id: ++this.nextId, kind, title: titles[kind], source: captureFigureSource(source.label, source.rows), ...(kind === 'coediting' ? { coeditingMetric: [...this.coeditingMetric], coeditingSubsets: this.coeditingSubsets.map(names => [...names]) } : {}) }))];
+    if(this.kind==='guide-alleles'){this.panels=[...this.panels,...source.rows.map(row=>({id:++this.nextId,kind:'guide-alleles' as const,title:row.name,binding:row.guideReplicates?{scope:this.scopeKey,references:[row.guideReplicates[0]?.reference||row.name],target:row.target!.target_id,samples:row.guideReplicates.map(rep=>rep.sample),rowLabel:row.name,label:source.label}:this.binding({label:source.label,rows:[row]}),source:captureFigureSource(source.label,[row])}))];this.refresh();return;}
+    this.panels = [...this.panels, ...this.requestedKinds.map(kind => ({ id: ++this.nextId, kind, title: titles[kind], binding:this.binding(source), source: captureFigureSource(source.label, source.rows), ...(kind === 'coediting' ? { coeditingMetric: [...this.coeditingMetric], coeditingSubsets: this.coeditingSubsets.map(names => [...names]) } : {}) }))];
     this.refresh();
   }
   refresh() {
@@ -180,6 +227,7 @@ export class FigureComposerComponent implements OnChanges {
     for (const [key, fallback, min, max] of [['fontSize',14,10,22],['radius',30,10,60],['groupLimit',5,1,12],['minFrequency',2,0,100]] as const) {
       const value = Number(this.options[key]); this.options[key] = Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
     }
+    for(const key of ['sequenceBases','guideSequenceBases']as const)if(this.options[key]!==undefined){const value=Number(this.options[key]);this.options[key]=Number.isFinite(value)?Math.min(this.maxAnnotationBases,Math.max(1,Math.round(value))):Math.min(60,this.maxAnnotationBases);}
     this.svg = renderFigure(this.panels, this.options);
     this.previewLayout = figurePanelLayout(this.panels, this.options);
     // Only our escaped, locally generated SVG is trusted; raw user markup is never accepted.

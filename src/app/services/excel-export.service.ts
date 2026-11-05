@@ -1,3 +1,4 @@
+import {captureGuideReportSelections} from './guide-report-selection';
 import { Injectable } from '@angular/core';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -294,7 +295,7 @@ export class ExcelExportService {
     const metaSheet = wb.getWorksheet('.metadata');
     if (metaSheet) {
       let jsonStr = ''; metaSheet.eachRow(row => { const val = row.getCell(1).text; if (val) jsonStr += val; });
-      try { const r = JSON.parse(jsonStr); if (r.params && r.scopes) return r; } catch (e) { }
+      try { const r = JSON.parse(jsonStr); if (r.params && r.scopes) { captureGuideReportSelections(wb,r.scopes); return r; } } catch (e) { }
     }
     return { params: {}, scopes: [] };
   }

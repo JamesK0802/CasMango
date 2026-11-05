@@ -673,6 +673,6 @@
     </div>
   </div>
   <section id="guide-figure-workspace" class="figure-workspace" [class.guide-exploration]="state.guideReadActionsPreview" [hidden]="!figureOpen" aria-label="Figure workspace">
-    <app-figure-composer [source]="figureInitialSource" [genes]="presentationGenes" [active]="figureOpen" [(coeditingMetric)]="coeditingMetric" [(coeditingSubsets)]="coeditingSubsets" [previewOnly]="state.guideReadActionsPreview" />
+    <app-figure-composer [source]="figureInitialSource" [genes]="presentationGenes" [replicateFiles]="figureReplicateFiles" [mergedGenes]="figureMergedGenes" [scopeKey]="figureScopeKey" [curationRevision]="figureCurationRevision" [active]="figureOpen" [(coeditingMetric)]="coeditingMetric" [(coeditingSubsets)]="coeditingSubsets" [previewOnly]="state.guideReadActionsPreview" />
   </section>
 </div>

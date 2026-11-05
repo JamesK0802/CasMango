@@ -157,8 +157,8 @@ describe('figure snapshots and publication SVG', () => {
     target.top_groups[0].tokens = [{type:'unobserved', val:'XXXX'}, {type:'equal', val:'A'.repeat(8)}, {type:'insert', val:'GG'}, {type:'delete', val:'AA'}, {type:'equal', val:'A'.repeat(30)}];
     const cells = sequenceCells(target, 0, 10);
     expect(cells.slice(0,2).every(c => c.type === 'unobserved')).toBe(true);
-    expect(cells.find(c => c.type === 'insert')?.text).toBe('+GG');
-    expect(cells.filter(c => c.type === 'delete').map(c => c.text)).toEqual(['−','−']);
+    expect(cells.filter(c => c.type === 'insert').map(c=>c.text).join('')).toBe('GG');
+    expect(cells.filter(c => c.type === 'delete').map(c => c.text)).toEqual(['-','-']);
     expect(cells.filter(c => c.type !== 'insert')).toHaveLength(20);
   });
   it('display threshold omits rare groups without renormalizing remaining frequencies', () => {
@@ -300,3 +300,27 @@ describe('two-visible-pane workspace', () => {
     expect(track.scrollTo).toHaveBeenCalledWith({left:0,behavior:'smooth'});
   });
 });
+
+it('renders annotation insertions inline, deletions as single-width hyphens and substitutions blue/underlined',()=>{
+ const data=source(),target=data.rows[0].target!;target.ref_sequence='ACCT';target.cut_site_index=2;
+ target.top_groups=[{read_inner:'ACGCT',net_indel:1,read_count:50,read_pct:50,classification:'out_of_frame',group_rank:1,tokens:[{type:'equal',val:'AC'},{type:'insert',val:'G'},{type:'equal',val:'CT'}]},{read_inner:'AT-T',net_indel:-1,read_count:40,read_pct:40,classification:'out_of_frame',group_rank:2,tokens:[{type:'equal',val:'A'},{type:'substitute',val:'T'},{type:'delete',val:'C'},{type:'equal',val:'T'}]}];
+ expect(sequenceCells(target,0,20,4).map(c=>c.text).join('')).toBe('ACGCT');
+ const svg=renderFigure([{id:1,kind:'alleles',title:'Annotation',source:data}],{...options,columns:1,sequenceBases:4});
+ expect(svg).not.toContain('stroke-dasharray="3 3"');
+ const bases=[...svg.matchAll(/<text ([^>]*data-annotation-base="([^"]+)"[^>]*)>([^<]*)<\/text>/g)];
+ const inserted=bases.find(m=>m[2]==='insert')!,deleted=bases.find(m=>m[2]==='delete')!,sub=bases.find(m=>m[2]==='substitute')!;
+ expect(inserted[3]).toBe('G');expect(deleted[3]).toBe('-');expect(inserted[1]).toContain('fill="#dc2626"');expect(deleted[1]).toContain('fill="#dc2626"');expect(sub[1]).toContain('fill="#2563eb"');expect(svg).toContain('data-annotation-underline="substitute"');
+ expect(new Set(bases.slice(0,9).map(m=>/font-size="([^"]+)"/.exec(m[1])![1])).size).toBe(1);
+ expect(new Set(bases.slice(0,9).map(m=>/ y="([^"]+)"/.exec(' '+m[1])![1])).size).toBe(2); // reference and insertion row
+});
+it('clips an exact odd annotation span to the stored analysis window without changing the results',()=>{
+ const data=source(),target=data.rows[0].target!;target.cut_site_index=2;target.ref_sequence='ACGTACGTAC';target.top_groups![0].tokens=[{type:'equal',val:target.ref_sequence}];const before=structuredClone(data);
+ expect(sequenceCells(target,0,20,7)).toHaveLength(7);expect(sequenceCells(target,0,20,999)).toHaveLength(10);
+ const c=new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v}as any,{detectChanges:vi.fn()}as any);c.source=data;c.kind='alleles';c.addPanel();c.setAnnotationBases(999);expect(c.options.sequenceBases).toBe(10);c.setAnnotationBases(7);expect(c.annotationBases).toBe(7);expect(data).toEqual(before);
+});
+it('annotation span leaves every other figure type unchanged',()=>{
+ for(const kind of ['profile','editing','summary','coediting']as const){const panels=[{id:1,kind,title:kind,source:source()}];expect(renderFigure(panels,{...options,sequenceBases:5})).toBe(renderFigure(panels,{...options,sequenceBases:80}));}
+});
+it('adds gRNA replicate panels independently without changing reference annotation span or group limits',()=>{const c=new FigureComposerComponent({bypassSecurityTrustHtml:(v:string)=>v}as any,{detectChanges:vi.fn()}as any),g=gene('A');const t=g.analysis_result.targets[0];t.ref_sequence='CCGACGTACGG';t.display_sgrna_seq='ACGTAC';t.grna_start_index=3;t.top_groups[0].tokens=[{type:'equal',val:t.ref_sequence}];c.genes=[g];c.selectedRefs=['A'];c.targetChoice='t1';c.replicateFiles=['C1.fq','C2.fq'].map(sample=>({sample,genes:[g]}));c.options.sequenceBases=7;c.options.groupLimit=3;c.kind='guide-alleles';c.kindChanged();expect(c.selectedSource.rows[0].guideReplicates).toHaveLength(2);c.addPanel();expect(c.panels[0].kind).toBe('guide-alleles');c.setAnnotationBases(9);c.setGroupLimit(20);expect(c.options.sequenceBases).toBe(7);expect(c.options.groupLimit).toBe(3);expect(c.options.guideSequenceBases).toBe(9);expect(c.options.guideGroupLimit).toBe(20);g.analysis_result.targets[0].top_groups=[];expect(c.panels[0].source.rows[0].guideReplicates![0].target.top_groups).toHaveLength(1);});
+it('keeps replicate input identities stable across change detection and preserves report membership separately from curated groups',()=>{const g=gene('A'),key=JSON.stringify(['A','t1']),file={fastq_file:'C1.fq',multi_reference_result:{genes:[g]},guideFigureSelections:{[key]:{sequences:['visible']}}},state:any={allFileResults:[file],isCuratedView:false,isFileExcluded:()=>false},d=new ResultDashboardComponent(state,{}as any,{}as any),first=d.figureReplicateFiles;expect(d.figureReplicateFiles).toBe(first);expect((first[0].genes[0].analysis_result.targets[0]as any).guideReportGroups).toEqual(['visible']);state.isCuratedView=true;state.curationConfig={excludedGroups:[]};const curated=d.figureReplicateFiles;expect(curated).not.toBe(first);expect((curated[0].genes[0].analysis_result.targets[0]as any).guideReportGroups).toBeUndefined();expect(d.figureReplicateFiles).toBe(curated);file.fastq_file='C2.fq';expect(d.figureReplicateFiles[0].sample).toBe('C2.fq');});
+it('lays out the independent gRNA annotation in two columns automatically without changing the other figure grids',()=>{const panels=Array.from({length:4},(_,i)=>({id:i,kind:'guide-alleles' as const,title:'gRNA',source:source()})),layout=figurePanelLayout(panels,{...options,columns:0,layout:'auto'});expect(layout.slots.map(s=>s.col)).toEqual([0,1,0,1]);expect(layout.slots.map(s=>s.row)).toEqual([0,0,2,2]);});
