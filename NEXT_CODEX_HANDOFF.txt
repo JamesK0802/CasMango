@@ -1,0 +1,14 @@
+CasMango current handoff 2026-11-05
+
+Project: /Users/james/Desktop/CasMango (physical path /Volumes/Storage/Deployment/CasMango)
+Repository: https://github.com/JamesK0802/CasMango
+Current application scope: Nanopore/Illumina CRISPR amplicon read analysis, result viewer, benchmark, sequence viewer, contact/version notes.
+
+The separate design/chromatogram workspace is maintained independently in /Users/james/Desktop/CasSago and https://github.com/JamesK0802/CasSago. Do not restore its old feature modules or development gate into this application. Ordinary gRNA input, cut-site detection and group annotation remain part of read analysis.
+
+Validation:40 test files /404tests passed in the staged clean copy and again in the actual project. Production build passed; existing2MB initial-bundle warning remains (2.11MB, error budget passed). Preserved all prior result/Curate/threshold/figure and guide-annotation changes. Current runtime commit813894e82d37b85914c87c28d556ce7c62bba095 passed GitHub Actions.
+
+Local deployment: http://127.0.0.1:8431/ and the existing Tailscale8431 binding serve dist/casmango/browser from this project, not from an old research snapshot. Index and main bundle were verified over HTTP, and browser navigation showed only the four read-analysis tools.
+
+Migration record and reversible quarantine: /Users/james/Desktop/CasSago_Migration_20261105
+380 explicitly enumerated, hash-checked, Git-untracked design-only files were moved there after retained dependency checks. No broad permanent deletion or whole-repo reset/clean was performed. The original tracked patch and source archive are preserved there.
